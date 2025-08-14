@@ -3,15 +3,14 @@
 import os
 import uuid
 from typing import List, Dict, Any, Optional
-# import chromadb
-# from chromadb.config import Settings as ChromaSettings
-# from sentence_transformers import SentenceTransformer
+import chromadb
+from chromadb.config import Settings as ChromaSettings
 from app.config import settings
 from app.chunking import TextChunker
 
 
 class ContentIndexer:
-    """Handles content indexing and embedding with simple storage."""
+    """Handles content indexing and embedding with Chroma."""
     
     def __init__(self):
         self.chunk_processor = TextChunker(
@@ -19,21 +18,29 @@ class ContentIndexer:
             chunk_overlap=settings.chunk_overlap
         )
         
-        # Simple in-memory storage for now (will be replaced with real vector DB)
-        self.indexed_content = []
-        self.document_count = 0
+        # Initialize Chroma client
+        self._init_chroma_client()
     
-    def generate_embeddings(self, texts: List[str]) -> List[List[float]]:
-        """Generate simple embeddings for a list of texts (simplified for demo)."""
-        # Simple word frequency-based embeddings for demo purposes
-        # In production, this would use a proper embedding model
-        embeddings = []
-        for text in texts:
-            words = text.lower().split()
-            # Simple frequency vector (first 100 most common words)
-            embedding = [float(words.count(str(i))) for i in range(100)]
-            embeddings.append(embedding)
-        return embeddings
+    def _init_chroma_client(self):
+        """Initialize Chroma database client."""
+        # Ensure data directory exists
+        os.makedirs(settings.chroma_db_path, exist_ok=True)
+        
+        # Initialize persistent Chroma client
+        self.chroma_client = chromadb.PersistentClient(
+            path=settings.chroma_db_path
+        )
+        
+        # Get or create collection
+        try:
+            self.collection = self.chroma_client.get_collection(
+                name=settings.chroma_collection_name
+            )
+        except Exception:
+            self.collection = self.chroma_client.create_collection(
+                name=settings.chroma_collection_name,
+                metadata={"description": "Website content for RAG system"}
+            )
     
     def index_page_content(self, page_data: Dict[str, Any]) -> Dict[str, int]:
         """Index content from a single page."""
@@ -44,16 +51,26 @@ class ContentIndexer:
             if not chunks:
                 return {"chunks_processed": 0, "chunks_indexed": 0}
             
-            # Store in simple memory structure for demo
-            for chunk in chunks:
-                indexed_item = {
-                    "id": str(uuid.uuid4()),
-                    "content": chunk['content'],
-                    "metadata": chunk['metadata']
-                }
-                self.indexed_content.append(indexed_item)
+            # Prepare data for indexing
+            chunk_texts = [chunk['content'] for chunk in chunks]
+            chunk_ids = [str(uuid.uuid4()) for _ in chunks]
             
-            self.document_count += 1
+            # Prepare metadata
+            metadatas = []
+            for chunk in chunks:
+                metadata = chunk['metadata'].copy()
+                # Ensure all metadata values are strings
+                for key, value in metadata.items():
+                    if value is not None:
+                        metadata[key] = str(value)
+                metadatas.append(metadata)
+            
+            # Add to Chroma collection
+            self.collection.add(
+                documents=chunk_texts,
+                metadatas=metadatas,
+                ids=chunk_ids
+            )
             
             return {
                 "chunks_processed": len(chunks),
@@ -88,17 +105,25 @@ class ContentIndexer:
     
     def get_collection_stats(self) -> Dict[str, Any]:
         """Get statistics about the indexed collection."""
-        return {
-            "total_documents": len(self.indexed_content),
-            "collection_name": settings.chroma_collection_name,
-            "embedding_model": settings.embedding_model
-        }
+        try:
+            count = self.collection.count()
+            return {
+                "total_documents": count,
+                "collection_name": settings.chroma_collection_name,
+                "embedding_model": "chromadb-default-ef"
+            }
+        except Exception as e:
+            raise Exception(f"Failed to get collection stats: {str(e)}")
     
     def clear_collection(self) -> bool:
         """Clear all documents from the collection."""
         try:
-            self.indexed_content = []
-            self.document_count = 0
+            # Delete the collection and recreate it
+            self.chroma_client.delete_collection(name=settings.chroma_collection_name)
+            self.collection = self.chroma_client.create_collection(
+                name=settings.chroma_collection_name,
+                metadata={"description": "Website content for RAG system"}
+            )
             return True
         except Exception as e:
             print(f"Failed to clear collection: {str(e)}")
@@ -107,26 +132,24 @@ class ContentIndexer:
     def search_similar_content(self, query: str, n_results: int = 5) -> List[Dict[str, Any]]:
         """Search for similar content in the collection."""
         try:
-            # Simple keyword search for demo (will be replaced with vector search)
-            query_words = query.lower().split()
+            # Search in Chroma
+            results = self.collection.query(
+                query_texts=[query],
+                n_results=n_results,
+                include=['documents', 'metadatas', 'distances']
+            )
+            
+            # Process results
             similar_content = []
+            if results['documents'] and results['documents'][0]:
+                for i in range(len(results['documents'][0])):
+                    similar_content.append({
+                        'content': results['documents'][0][i],
+                        'metadata': results['metadatas'][0][i],
+                        'similarity_score': max(0, 1 - results['distances'][0][i])  # Convert distance to similarity
+                    })
             
-            for item in self.indexed_content:
-                content_words = item['content'].lower().split()
-                # Simple relevance score based on word overlap
-                common_words = set(query_words) & set(content_words)
-                if common_words:
-                    similarity_score = len(common_words) / max(len(query_words), len(content_words))
-                    if similarity_score >= 0.1:  # Basic threshold
-                        similar_content.append({
-                            'content': item['content'],
-                            'metadata': item['metadata'],
-                            'similarity_score': similarity_score
-                        })
-            
-            # Sort by similarity score and return top results
-            similar_content.sort(key=lambda x: x['similarity_score'], reverse=True)
-            return similar_content[:n_results]
+            return similar_content
             
         except Exception as e:
             raise Exception(f"Failed to search similar content: {str(e)}")
