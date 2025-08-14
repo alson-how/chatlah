@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field, HttpUrl
 
 class CrawlRequest(BaseModel):
     """Request model for crawling a website."""
-    url: HttpUrl = Field(..., description="URL to crawl")
+    target_url: HttpUrl = Field(..., description="URL to crawl")
     max_pages: int = Field(default=10, ge=1, le=100, description="Maximum number of pages to crawl")
     include_subdomains: bool = Field(default=False, description="Whether to include subdomains")
 

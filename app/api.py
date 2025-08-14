@@ -137,7 +137,7 @@ async def crawl_website(request: CrawlRequest):
         
         # Crawl the website
         pages = crawler.crawl_website(
-            url=str(request.url),
+            url=str(request.target_url),
             max_pages=request.max_pages,
             include_subdomains=request.include_subdomains
         )
