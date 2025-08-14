@@ -470,14 +470,25 @@
                     if (result.sources && result.sources.length > 0) {
                         html += '<h4>Sources:</h4>';
                         result.sources.forEach(source => {
-                            html += `
-                                <div class="source">
-                                    <span class="similarity-score">Score: ${(source.similarity_score * 100).toFixed(1)}%</span>
-                                    <a href="${source.url}" target="_blank" class="source-url">${source.url}</a>
-                                    <p><strong>${source.title}</strong></p>
-                                    <p>${source.content.substring(0, 200)}...</p>
-                                </div>
-                            `;
+                            // Handle both old format (object) and new format (string URL)
+                            if (typeof source === 'string') {
+                                // New simplified format - source is just a URL
+                                html += `
+                                    <div class="source">
+                                        <a href="${source}" target="_blank" class="source-url">${source}</a>
+                                    </div>
+                                `;
+                            } else {
+                                // Old detailed format - source is an object with metadata
+                                html += `
+                                    <div class="source">
+                                        <span class="similarity-score">Score: ${(source.similarity_score * 100).toFixed(1)}%</span>
+                                        <a href="${source.url}" target="_blank" class="source-url">${source.url}</a>
+                                        <p><strong>${source.title || 'Untitled'}</strong></p>
+                                        <p>${(source.content || '').substring(0, 200)}...</p>
+                                    </div>
+                                `;
+                            }
                         });
                     }
                     
