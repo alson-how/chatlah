@@ -5,11 +5,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 import uvicorn
-from typing import Dict, Any
+from typing import Dict, Any, List
 
 from app.models import (
     AskRequest, AskResponse, HealthResponse, ErrorResponse,
-    CrawlRequest, CrawlResponse
+    CrawlRequest, CrawlResponse, CrawledPage
 )
 from app.retriever import ContentRetriever
 from app.config import settings
@@ -163,6 +163,66 @@ async def crawl_website(request: CrawlRequest):
         raise HTTPException(
             status_code=500,
             detail=f"Failed to crawl website: {str(e)}"
+        )
+
+
+@app.get("/crawled-pages")
+async def get_crawled_pages() -> List[CrawledPage]:
+    """Get list of all crawled pages."""
+    try:
+        from collections import defaultdict
+        import chromadb
+        
+        # Connect to ChromaDB directly
+        client = chromadb.PersistentClient(path=settings.chroma_db_path)
+        collection = client.get_collection(settings.chroma_collection_name)
+        
+        # Get all documents with metadata
+        results = collection.get(include=['metadatas'])
+        
+        # Count chunks per URL and get titles
+        url_data = defaultdict(lambda: {'count': 0, 'title': '', 'last_crawled': None})
+        
+        for metadata in results['metadatas']:
+            url = metadata.get('url', 'Unknown')
+            if url and url != 'Unknown':
+                url_data[url]['count'] += 1
+                if not url_data[url]['title'] and metadata.get('title'):
+                    url_data[url]['title'] = metadata.get('title', '')
+                # Get the latest scraped time
+                scraped_at = metadata.get('scraped_at')
+                if scraped_at:
+                    try:
+                        scraped_timestamp = float(scraped_at)
+                        if not url_data[url]['last_crawled'] or scraped_timestamp > url_data[url]['last_crawled']:
+                            url_data[url]['last_crawled'] = scraped_timestamp
+                    except (ValueError, TypeError):
+                        pass  # Skip invalid timestamps
+        
+        # Convert to CrawledPage objects
+        crawled_pages = []
+        for url, data in url_data.items():
+            from datetime import datetime
+            last_crawled_str = None
+            if data['last_crawled']:
+                last_crawled_str = datetime.fromtimestamp(data['last_crawled']).strftime('%Y-%m-%d %H:%M:%S')
+                
+            crawled_pages.append(CrawledPage(
+                url=url,
+                title=data['title'] or url.split('/')[-1] or 'Untitled',
+                chunks_count=data['count'],
+                last_crawled=last_crawled_str
+            ))
+        
+        # Sort by number of chunks (descending)
+        crawled_pages.sort(key=lambda x: x.chunks_count, reverse=True)
+        
+        return crawled_pages
+    
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to get crawled pages: {str(e)}"
         )
 
 

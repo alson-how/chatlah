@@ -202,6 +202,47 @@
             color: #718096;
         }
         
+        .crawled-pages {
+            margin-top: 1rem;
+        }
+        
+        .page-item {
+            background: white;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 0.75rem;
+        }
+        
+        .page-url {
+            color: #667eea;
+            font-weight: 500;
+            text-decoration: none;
+            word-break: break-all;
+        }
+        
+        .page-url:hover {
+            text-decoration: underline;
+        }
+        
+        .page-meta {
+            margin-top: 0.5rem;
+            font-size: 0.875rem;
+            color: #718096;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .chunks-badge {
+            background: #667eea;
+            color: white;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 500;
+        }
+        
         @media (max-width: 768px) {
             .options {
                 grid-template-columns: 1fr;
@@ -268,6 +309,13 @@
                 <div id="crawlStatus" class="status"></div>
             </div>
             
+            <div class="crawled-pages-section">
+                <h2>Crawled Pages</h2>
+                <div id="crawledPagesList" class="crawled-pages">
+                    <div id="pagesLoading" class="status loading">Loading crawled pages...</div>
+                </div>
+            </div>
+            
             <div class="query-section">
                 <h2>Ask Questions</h2>
                 <form id="queryForm">
@@ -300,6 +348,10 @@
         const queryForm = document.getElementById('queryForm');
         const queryBtn = document.getElementById('queryBtn');
         const queryResults = document.getElementById('queryResults');
+        const crawledPagesList = document.getElementById('crawledPagesList');
+        const pagesLoading = document.getElementById('pagesLoading');
+        const crawledPagesList = document.getElementById('crawledPagesList');
+        const pagesLoading = document.getElementById('pagesLoading');
         
         // Show status message
         function showStatus(element, message, type) {
@@ -311,6 +363,41 @@
         // Hide status
         function hideStatus(element) {
             element.style.display = 'none';
+        }
+        
+        // Load and display crawled pages
+        async function loadCrawledPages() {
+            try {
+                pagesLoading.style.display = 'block';
+                
+                const response = await fetch(`${API_BASE}/crawled-pages`);
+                const pages = await response.json();
+                
+                pagesLoading.style.display = 'none';
+                
+                if (response.ok && pages.length > 0) {
+                    let html = '';
+                    pages.forEach(page => {
+                        html += `
+                            <div class="page-item">
+                                <a href="${page.url}" target="_blank" class="page-url">${page.url}</a>
+                                <div class="page-meta">
+                                    <span>Last crawled: ${page.last_crawled || 'Unknown'}</span>
+                                    <span class="chunks-badge">${page.chunks_count} chunks</span>
+                                </div>
+                            </div>
+                        `;
+                    });
+                    crawledPagesList.innerHTML = html;
+                } else if (response.ok && pages.length === 0) {
+                    crawledPagesList.innerHTML = '<p style="color: #718096; text-align: center; padding: 2rem;">No pages have been crawled yet. Start by crawling a website above.</p>';
+                } else {
+                    crawledPagesList.innerHTML = '<p style="color: #c53030; text-align: center; padding: 2rem;">Failed to load crawled pages.</p>';
+                }
+            } catch (error) {
+                pagesLoading.style.display = 'none';
+                crawledPagesList.innerHTML = '<p style="color: #c53030; text-align: center; padding: 2rem;">Error loading pages: ' + error.message + '</p>';
+            }
         }
         
         // Handle crawl form submission
@@ -353,6 +440,8 @@
                 showStatus(crawlStatus, `Error: ${error.message}`, 'error');
             } finally {
                 crawlBtn.disabled = false;
+                // Reload the crawled pages list after crawling
+                loadCrawledPages();
             }
         });
         
@@ -404,6 +493,9 @@
                 queryBtn.disabled = false;
             }
         });
+        
+        // Load crawled pages when page loads
+        window.addEventListener('load', loadCrawledPages);
     </script>
 </body>
 </html>

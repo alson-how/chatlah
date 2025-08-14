@@ -19,6 +19,14 @@ class CrawlResponse(BaseModel):
     message: str
 
 
+class CrawledPage(BaseModel):
+    """Model representing a crawled page."""
+    url: str = Field(..., description="Page URL")
+    title: str = Field(default="", description="Page title")  
+    chunks_count: int = Field(..., description="Number of content chunks from this page")
+    last_crawled: Optional[str] = Field(None, description="When the page was last crawled")
+
+
 class AskRequest(BaseModel):
     """Request model for asking questions."""
     question: str = Field(..., min_length=1, max_length=1000, description="Question to ask")
