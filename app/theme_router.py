@@ -19,19 +19,23 @@ def detect_theme_query(text: str) -> bool:
 
 
 def find_theme_url(text: str) -> str:
-    t = norm(text)
-    # direct/substring
-    for k, u in MAP.items():
-        if k in t: return u
-    # fuzzy whole-string
-    keys = list(MAP.keys())
-    hit = difflib.get_close_matches(t, keys, n=1, cutoff=0.75)
-    if hit: return MAP[hit[0]]
-    # token windows
-    toks = t.split()
-    for w in range(min(4, len(toks)), 0, -1):
-        for i in range(len(toks) - w + 1):
-            p = " ".join(toks[i:i + w])
-            hit = difflib.get_close_matches(p, keys, n=1, cutoff=0.85)
-            if hit: return MAP[hit[0]]
+    """Return best URL or '' if no good match."""
+    t = _normalize(text)
+    # 1) exact/substring match
+    for key, url in _map.items():
+        if key in t:
+            return url
+    # 2) fuzzy match (closest key above threshold)
+    keys = list(_map.keys())
+    best = difflib.get_close_matches(t, keys, n=1, cutoff=0.72)
+    if best:
+        return _map[best[0]]
+    # 3) try token-level fuzzy (for phrases like 'modern clean minimal feel')
+    tokens = t.split()
+    for window in range(min(4, len(tokens)), 0, -1):
+        for i in range(len(tokens) - window + 1):
+            phrase = " ".join(tokens[i:i + window])
+            best = difflib.get_close_matches(phrase, keys, n=1, cutoff=0.85)
+            if best:
+                return _map[best[0]]
     return ""

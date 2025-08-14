@@ -290,7 +290,7 @@ def chat_endpoint(req: ChatRequest):
     # Theme detection with contact handling
     if mentions_theme(req.user_message):
         print("Theme detected!" + req.user_message)
-        url = resolve_theme_url(req.user_message)
+        url = find_theme_url(req.user_message)
         if url:
             if need_contact(st):
                 reply = f"Sure—here's one project that fits: {url}. May I have your name and phone number so I can follow up properly?"
