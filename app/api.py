@@ -10,6 +10,7 @@ from app.config import OPENAI_API_KEY
 from crawler.firecrawl_crawl import FirecrawlClient
 import requests
 import time
+import os
 
 app = FastAPI(title="RAG Site API", version="1.0.0")
 
@@ -34,12 +35,25 @@ async def root():
 def health():
     return {"ok": True}
 
-SYSTEM_PROMPT = (
-    "You are a company knowledge assistant. "
-    "Answer ONLY using the provided context. "
-    "If the answer isn't in context, say you don't have that information. "
-    "Cite sources by listing their URLs at the end."
-)
+def load_system_prompt(tone_type: str = "customer_support") -> str:
+    """Load system prompt from tone file."""
+    tone_file = f"tone/{tone_type}.txt"
+    try:
+        with open(tone_file, 'r', encoding='utf-8') as f:
+            return f.read().strip()
+    except FileNotFoundError:
+        # Fallback to customer_support if specified tone doesn't exist
+        try:
+            with open("tone/customer_support.txt", 'r', encoding='utf-8') as f:
+                return f.read().strip()
+        except FileNotFoundError:
+            # Ultimate fallback if no tone files exist
+            return (
+                "You are a company knowledge assistant. "
+                "Answer ONLY using the provided context. "
+                "If the answer isn't in context, say you don't have that information. "
+                "Cite sources by listing their URLs at the end."
+            )
 
 def call_chat(messages):
     r = requests.post(
@@ -57,6 +71,9 @@ def ask(req: AskRequest):
     if not hits:
         return AskResponse(answer="I don't have that information in my knowledge base.", sources=[])
 
+    # Load system prompt based on tone type
+    system_prompt = load_system_prompt(req.tone_type or "customer_support")
+
     # Compose context
     sources = []
     ctx_lines = []
@@ -69,7 +86,7 @@ def ask(req: AskRequest):
 
     user = f"Question: {req.question}\n\nContext:\n" + "\n".join(ctx_lines[:6])
     msg = [
-        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "system", "content": system_prompt},
         {"role": "user", "content": user}
     ]
     answer = call_chat(msg)

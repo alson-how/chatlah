@@ -35,20 +35,23 @@ Preferred communication style: Simple, everyday language.
 ### API Design
 - **Health Endpoint**: System status monitoring with database connectivity checks
 - **Crawl Endpoint**: Website crawling with configurable parameters (max pages, subdomain inclusion)
-- **Ask Endpoint**: Question-answering with source citations and confidence scoring
+- **Ask Endpoint**: Question-answering with source citations, confidence scoring, and configurable response tone
 - **Request/Response Models**: Pydantic models for validation and API documentation
+- **Dynamic Tone System**: Configurable response styles (customer_support, technical, casual) loaded from external files
 
 ### Configuration Management
 - **Environment-Based**: Centralized settings with .env file support
 - **API Keys**: Secure handling of Firecrawl and OpenAI API credentials
 - **Configurable Parameters**: Chunk sizes, similarity thresholds, and retrieval limits
+- **Response Tone Configuration**: External tone files (customer_support.txt, technical.txt, casual.txt) for dynamic system prompt loading
 
 ### Data Flow Architecture
-1. **Crawling**: Firecrawl API extracts website content
-2. **Processing**: Content is cleaned, chunked, and embedded
-3. **Indexing**: Vectors and metadata stored in ChromaDB
-4. **Retrieval**: Semantic search finds relevant content chunks
-5. **Response**: Grounded answers with source citations and similarity scores
+1. **Crawling**: Firecrawl API extracts website content with proper URL extraction from metadata
+2. **Processing**: Content is cleaned, chunked, and embedded using OpenAI text-embedding-3-large
+3. **Indexing**: Vectors and metadata stored in ChromaDB with authentic page URLs
+4. **Retrieval**: Semantic search finds relevant content chunks based on similarity thresholds
+5. **Tone Selection**: Dynamic system prompt loading based on user-specified tone type
+6. **Response**: Grounded answers with authentic source citations and configurable response style
 
 ## External Dependencies
 

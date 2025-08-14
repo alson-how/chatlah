@@ -31,6 +31,7 @@ class AskRequest(BaseModel):
     """Request model for asking questions."""
     question: str = Field(..., min_length=1, max_length=1000, description="Question to ask")
     top_k: Optional[int] = Field(default=5, ge=1, le=20, description="Maximum number of results to return")
+    tone_type: Optional[str] = Field(default="customer_support", description="Response tone type (customer_support, technical, casual)")
 
 
 class SourceDocument(BaseModel):
