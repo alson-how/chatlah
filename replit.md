@@ -28,8 +28,8 @@ Preferred communication style: Simple, everyday language.
 
 ### Vector Database Architecture
 - **ChromaDB Integration**: Persistent vector storage with configurable collection management
-- **Sentence Transformers**: Uses 'all-MiniLM-L6-v2' model for embedding generation
-- **Similarity Search**: Threshold-based filtering (0.7) with configurable result limits
+- **OpenAI Embeddings**: Uses 'text-embedding-3-large' model for high-quality embedding generation
+- **Similarity Search**: Threshold-based filtering with configurable result limits
 - **Metadata Storage**: URL, title, and content metadata for citation support
 
 ### API Design
@@ -61,8 +61,8 @@ Preferred communication style: Simple, everyday language.
 - **Persistent Storage**: Local file-based storage in configurable directory path
 
 ### Machine Learning Models
-- **Sentence Transformers**: HuggingFace library for text embedding generation
-- **Model**: all-MiniLM-L6-v2 for efficient semantic embeddings
+- **OpenAI Embeddings API**: Advanced text embedding generation service
+- **Model**: text-embedding-3-large for high-quality semantic embeddings (3072 dimensions)
 
 ### Web Framework
 - **FastAPI**: Modern Python web framework with automatic API documentation
@@ -73,6 +73,6 @@ Preferred communication style: Simple, everyday language.
 - **BeautifulSoup4**: HTML parsing and content extraction
 - **Pydantic**: Data validation and settings management
 
-### Optional Integrations
-- **OpenAI API**: Fallback embedding service (requires OPENAI_API_KEY)
+### Required Integrations
+- **OpenAI API**: Primary embedding service (requires OPENAI_API_KEY)
 - **Environment Variables**: .env file support for configuration management

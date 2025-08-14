@@ -42,3 +42,9 @@ class Settings(BaseSettings):
 
 # Global settings instance
 settings = Settings()
+
+# Legacy constants for backward compatibility
+FIRECRAWL_API_KEY = settings.firecrawl_api_key
+OPENAI_API_KEY = settings.openai_api_key
+CHROMA_DIR = settings.chroma_db_path
+COLLECTION_NAME = settings.chroma_collection_name

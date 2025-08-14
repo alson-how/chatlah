@@ -12,6 +12,10 @@ class ContentRetriever:
     def __init__(self):
         self.indexer = ContentIndexer()
     
+    def get_database_status(self) -> Dict[str, Any]:
+        """Get database status for health checks."""
+        return self.indexer.get_database_status()
+    
     def retrieve_relevant_content(self, question: str, max_results: int = 5) -> List[Dict[str, Any]]:
         """Retrieve relevant content for a given question."""
         try:
@@ -139,19 +143,4 @@ class ContentRetriever:
                 question=question
             )
     
-    def get_database_status(self) -> Dict[str, Any]:
-        """Get current database status."""
-        try:
-            stats = self.indexer.get_collection_stats()
-            return {
-                "status": "healthy" if stats["total_documents"] > 0 else "empty",
-                "total_documents": stats["total_documents"],
-                "collection_name": stats["collection_name"]
-            }
-        except Exception as e:
-            return {
-                "status": "error",
-                "error": str(e),
-                "total_documents": 0,
-                "collection_name": settings.chroma_collection_name
-            }
+

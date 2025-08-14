@@ -17,3 +17,4 @@ requests==2.32.3
 tiktoken==0.7.0
 uvicorn[standard]==0.30.0
 firecrawl-py
+openai
