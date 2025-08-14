@@ -22,9 +22,7 @@ def detect_theme_query(text: str) -> bool:
 
 def find_theme_url(text: str) -> str:
     """Return best URL or '' if no good match."""
-    print(f"FIND_THEME_URL called with: '{text}'")
     t = _normalize(text)
-    print(f"Normalized text: '{t}'")
     # 1) exact/substring match
     for key, url in _map.items():
         if key in t:

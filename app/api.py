@@ -288,9 +288,7 @@ def chat_endpoint(req: ChatRequest):
 
     # Theme detection with contact handling
     if mentions_theme(req.user_message):
-        print(f"THEME DETECTED: '{req.user_message}'")
         url = resolve_theme_url(req.user_message)
-        print(f"RESOLVED URL: '{url}'")
         if url:
             if need_contact(st):
                 reply = f"Sure, here you go {url}. May I have your name and phone number so I can follow up properly?"
@@ -308,9 +306,7 @@ def chat_endpoint(req: ChatRequest):
     # 1) Detect style/feel intent and find theme URL
     theme_url = ""
     if mentions_theme(req.user_message):
-        print(f"SECONDARY THEME CHECK: '{req.user_message}'")
         theme_url = resolve_theme_url(req.user_message)
-        print(f"SECONDARY THEME URL: '{theme_url}'")
 
     # Query rewrite -> retrieval -> context
     rewritten = rewrite_query(st["summary"], req.user_message)
