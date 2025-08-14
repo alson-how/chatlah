@@ -15,7 +15,7 @@ class CrawlResponse(BaseModel):
     """Response model for crawl operation."""
     success: bool
     pages_crawled: int
-    pages_indexed: int
+    chunks_indexed: int
     message: str
 
 

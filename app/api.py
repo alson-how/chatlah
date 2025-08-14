@@ -2,7 +2,8 @@
 
 from fastapi import FastAPI, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 import uvicorn
 from typing import Dict, Any
 
@@ -30,6 +31,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Mount static files
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
 # Initialize retriever
 retriever = ContentRetriever()
 
@@ -45,6 +49,12 @@ async def general_exception_handler(request, exc):
             status_code=500
         ).dict()
     )
+
+
+@app.get("/")
+async def root():
+    """Serve the main web interface."""
+    return FileResponse("static/index.html")
 
 
 @app.get("/health", response_model=HealthResponse)
@@ -109,8 +119,8 @@ async def ask_question(request: AskRequest):
 
 
 @app.post("/crawl", response_model=CrawlResponse)
-async def crawl_website(request: CrawlRequest, background_tasks: BackgroundTasks):
-    """Crawl and index a website (runs in background)."""
+async def crawl_website(request: CrawlRequest):
+    """Crawl and index a website."""
     try:
         # Import crawler here to avoid circular imports
         from crawler.firecrawl_crawl import FirecrawlClient
@@ -122,33 +132,29 @@ async def crawl_website(request: CrawlRequest, background_tasks: BackgroundTasks
                 detail="Firecrawl API key not configured. Please set FIRECRAWL_API_KEY environment variable."
             )
         
-        # Start crawling in background
-        def crawl_and_index():
-            try:
-                crawler = FirecrawlClient(api_key=settings.firecrawl_api_key)
-                
-                # Crawl the website
-                pages = crawler.crawl_website(
-                    url=str(request.url),
-                    max_pages=request.max_pages,
-                    include_subdomains=request.include_subdomains
-                )
-                
-                # Index the content
-                if pages:
-                    result = retriever.indexer.index_multiple_pages(pages)
-                    print(f"Indexing completed: {result}")
-                
-            except Exception as e:
-                print(f"Background crawling failed: {str(e)}")
+        # Create crawler instance
+        crawler = FirecrawlClient(api_key=settings.firecrawl_api_key)
         
-        background_tasks.add_task(crawl_and_index)
+        # Crawl the website
+        pages = crawler.crawl_website(
+            url=str(request.url),
+            max_pages=request.max_pages,
+            include_subdomains=request.include_subdomains
+        )
+        
+        pages_crawled = len(pages) if pages else 0
+        chunks_indexed = 0
+        
+        # Index the content
+        if pages:
+            result = retriever.indexer.index_multiple_pages(pages)
+            chunks_indexed = result.get('chunks_indexed', 0)
         
         return CrawlResponse(
             success=True,
-            pages_crawled=0,  # Will be updated in background
-            pages_indexed=0,  # Will be updated in background
-            message="Crawling and indexing started in background. Check /health endpoint for progress."
+            pages_crawled=pages_crawled,
+            chunks_indexed=chunks_indexed,
+            message=f"Successfully crawled {pages_crawled} pages and indexed {chunks_indexed} content chunks."
         )
     
     except HTTPException:
@@ -156,7 +162,7 @@ async def crawl_website(request: CrawlRequest, background_tasks: BackgroundTasks
     except Exception as e:
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to start crawling: {str(e)}"
+            detail=f"Failed to crawl website: {str(e)}"
         )
 
 

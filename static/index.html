@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RAG System - Website Crawler</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%);
+            color: white;
+            padding: 2rem;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2.5rem;
+            margin-bottom: 0.5rem;
+            font-weight: 700;
+        }
+        
+        .header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+        
+        .main {
+            padding: 2rem;
+        }
+        
+        .crawl-section {
+            margin-bottom: 2rem;
+        }
+        
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+            color: #2d3748;
+        }
+        
+        input[type="url"], input[type="number"] {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: border-color 0.3s ease;
+        }
+        
+        input[type="url"]:focus, input[type="number"]:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        .options {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+        
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+        
+        .checkbox-group input[type="checkbox"] {
+            margin-right: 0.5rem;
+            transform: scale(1.2);
+        }
+        
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            width: 100%;
+        }
+        
+        button:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        
+        .status {
+            margin-top: 1.5rem;
+            padding: 1rem;
+            border-radius: 8px;
+            display: none;
+        }
+        
+        .status.success {
+            background: #f0fff4;
+            border: 1px solid #9ae6b4;
+            color: #2f855a;
+        }
+        
+        .status.error {
+            background: #fed7d7;
+            border: 1px solid #feb2b2;
+            color: #c53030;
+        }
+        
+        .status.loading {
+            background: #e6fffa;
+            border: 1px solid #81e6d9;
+            color: #2d7d73;
+        }
+        
+        .query-section {
+            border-top: 2px solid #e2e8f0;
+            padding-top: 2rem;
+        }
+        
+        textarea {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 1rem;
+            min-height: 100px;
+            resize: vertical;
+            font-family: inherit;
+        }
+        
+        textarea:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        .results {
+            margin-top: 1.5rem;
+            padding: 1rem;
+            background: #f7fafc;
+            border-radius: 8px;
+            border-left: 4px solid #667eea;
+            display: none;
+        }
+        
+        .source {
+            margin-top: 1rem;
+            padding: 0.75rem;
+            background: white;
+            border-radius: 6px;
+            border: 1px solid #e2e8f0;
+        }
+        
+        .source-url {
+            font-size: 0.875rem;
+            color: #667eea;
+            text-decoration: none;
+            font-weight: 500;
+        }
+        
+        .source-url:hover {
+            text-decoration: underline;
+        }
+        
+        .similarity-score {
+            float: right;
+            font-size: 0.875rem;
+            color: #718096;
+        }
+        
+        @media (max-width: 768px) {
+            .options {
+                grid-template-columns: 1fr;
+            }
+            
+            .header h1 {
+                font-size: 2rem;
+            }
+            
+            .main {
+                padding: 1.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>RAG System</h1>
+            <p>Crawl websites and ask questions about their content</p>
+        </div>
+        
+        <div class="main">
+            <div class="crawl-section">
+                <h2>Crawl Website</h2>
+                <form id="crawlForm">
+                    <div class="form-group">
+                        <label for="target_url">Website URL:</label>
+                        <input 
+                            type="url" 
+                            id="target_url" 
+                            name="target_url" 
+                            placeholder="https://example.com" 
+                            required
+                        >
+                    </div>
+                    
+                    <div class="options">
+                        <div class="form-group">
+                            <label for="max_pages">Max Pages:</label>
+                            <input 
+                                type="number" 
+                                id="max_pages" 
+                                name="max_pages" 
+                                value="10" 
+                                min="1" 
+                                max="100"
+                            >
+                        </div>
+                        
+                        <div class="checkbox-group">
+                            <input 
+                                type="checkbox" 
+                                id="include_subdomains" 
+                                name="include_subdomains"
+                            >
+                            <label for="include_subdomains">Include Subdomains</label>
+                        </div>
+                    </div>
+                    
+                    <button type="submit" id="crawlBtn">Start Crawling</button>
+                </form>
+                
+                <div id="crawlStatus" class="status"></div>
+            </div>
+            
+            <div class="query-section">
+                <h2>Ask Questions</h2>
+                <form id="queryForm">
+                    <div class="form-group">
+                        <label for="question">Your Question:</label>
+                        <textarea 
+                            id="question" 
+                            name="question" 
+                            placeholder="Ask anything about the crawled content..."
+                            required
+                        ></textarea>
+                    </div>
+                    
+                    <button type="submit" id="queryBtn">Get Answer</button>
+                </form>
+                
+                <div id="queryResults" class="results"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // API base URL
+        const API_BASE = '';
+        
+        // DOM elements
+        const crawlForm = document.getElementById('crawlForm');
+        const crawlBtn = document.getElementById('crawlBtn');
+        const crawlStatus = document.getElementById('crawlStatus');
+        const queryForm = document.getElementById('queryForm');
+        const queryBtn = document.getElementById('queryBtn');
+        const queryResults = document.getElementById('queryResults');
+        
+        // Show status message
+        function showStatus(element, message, type) {
+            element.className = `status ${type}`;
+            element.innerHTML = message;
+            element.style.display = 'block';
+        }
+        
+        // Hide status
+        function hideStatus(element) {
+            element.style.display = 'none';
+        }
+        
+        // Handle crawl form submission
+        crawlForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const formData = new FormData(crawlForm);
+            const data = {
+                target_url: formData.get('target_url'),
+                max_pages: parseInt(formData.get('max_pages')),
+                include_subdomains: formData.get('include_subdomains') === 'on'
+            };
+            
+            crawlBtn.disabled = true;
+            showStatus(crawlStatus, 'Crawling website... This may take a few minutes.', 'loading');
+            
+            try {
+                const response = await fetch(`${API_BASE}/crawl`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data)
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showStatus(crawlStatus, 
+                        `Successfully crawled ${result.pages_crawled} pages and indexed ${result.chunks_indexed} content chunks!`, 
+                        'success'
+                    );
+                } else {
+                    showStatus(crawlStatus, 
+                        `Error: ${result.detail || 'Failed to crawl website'}`, 
+                        'error'
+                    );
+                }
+            } catch (error) {
+                showStatus(crawlStatus, `Error: ${error.message}`, 'error');
+            } finally {
+                crawlBtn.disabled = false;
+            }
+        });
+        
+        // Handle query form submission
+        queryForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const question = document.getElementById('question').value;
+            
+            queryBtn.disabled = true;
+            queryResults.innerHTML = '<p>Searching for answers...</p>';
+            queryResults.style.display = 'block';
+            
+            try {
+                const response = await fetch(`${API_BASE}/ask`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ question })
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    let html = `<h3>Answer:</h3><p>${result.answer}</p>`;
+                    
+                    if (result.sources && result.sources.length > 0) {
+                        html += '<h4>Sources:</h4>';
+                        result.sources.forEach(source => {
+                            html += `
+                                <div class="source">
+                                    <span class="similarity-score">Score: ${(source.similarity_score * 100).toFixed(1)}%</span>
+                                    <a href="${source.url}" target="_blank" class="source-url">${source.url}</a>
+                                    <p><strong>${source.title}</strong></p>
+                                    <p>${source.content.substring(0, 200)}...</p>
+                                </div>
+                            `;
+                        });
+                    }
+                    
+                    queryResults.innerHTML = html;
+                } else {
+                    queryResults.innerHTML = `<p style="color: #c53030;">Error: ${result.detail || 'Failed to get answer'}</p>`;
+                }
+            } catch (error) {
+                queryResults.innerHTML = `<p style="color: #c53030;">Error: ${error.message}</p>`;
+            } finally {
+                queryBtn.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>
