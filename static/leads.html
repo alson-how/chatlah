@@ -268,8 +268,10 @@
             document.getElementById('no-leads').style.display = 'none';
 
             try {
-                const response = await fetch('/leads');
+                const response = await fetch('/leads?t=' + Date.now()); // Prevent caching
                 const data = await response.json();
+                
+                console.log('API Response:', data); // Debug log
                 
                 document.getElementById('loading').style.display = 'none';
                 
@@ -277,6 +279,7 @@
                     displayLeads(data.leads);
                     updateStats(data.leads);
                 } else {
+                    console.log('No leads found in response');
                     document.getElementById('no-leads').style.display = 'block';
                     updateStats([]);
                 }
@@ -292,7 +295,10 @@
             const tbody = document.getElementById('leads-tbody');
             tbody.innerHTML = '';
 
+            console.log('Displaying leads:', leads); // Debug log
+
             leads.forEach(lead => {
+                console.log('Processing lead:', lead); // Debug log
                 const row = document.createElement('tr');
                 
                 const createdDate = new Date(lead.created_at);
@@ -300,8 +306,8 @@
                                     createdDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
                 
                 row.innerHTML = `
-                    <td><strong>${escapeHtml(lead.name)}</strong></td>
-                    <td><a href="tel:${lead.phone}" class="phone-link">${lead.phone}</a></td>
+                    <td><strong>${escapeHtml(lead.name || 'Unknown')}</strong></td>
+                    <td><a href="tel:${lead.phone || ''}" class="phone-link">${lead.phone || 'No phone'}</a></td>
                     <td class="first-message">${escapeHtml(lead.first_message || 'No message')}</td>
                     <td>
                         ${lead.theme_interest ? 
