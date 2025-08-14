@@ -92,9 +92,18 @@ class FirecrawlClient:
                     if hasattr(crawl_result, 'success') and crawl_result.success:
                         # Process crawled pages
                         crawled_pages = getattr(crawl_result, 'data', [])
-                        for page_data in crawled_pages:
+                        for i, page_data in enumerate(crawled_pages):
+                            # Extract URL - try multiple possible attributes
+                            page_url = getattr(page_data, 'url', None)
+                            if not page_url:
+                                page_url = getattr(page_data, 'sourceURL', None)
+                            if not page_url and hasattr(page_data, 'metadata'):
+                                page_url = getattr(page_data.metadata, 'sourceURL', None)
+                            if not page_url:
+                                page_url = url if i == 0 else f"{url}#{i}"  # Fallback to base URL
+                            
                             page = {
-                                'url': getattr(page_data, 'url', url),
+                                'url': page_url,
                                 'title': getattr(page_data, 'title', '') or '',
                                 'description': getattr(page_data, 'description', '') or '',
                                 'content': getattr(page_data, 'markdown', '') or '',
