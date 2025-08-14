@@ -2,7 +2,7 @@
 
 ## Overview
 
-This is a production-ready Retrieval Augmented Generation (RAG) system that combines web crawling, content indexing, and interactive chatbot capabilities. The system automatically crawls websites using the Firecrawl API, processes and chunks the content, stores it in ChromaDB for vector search, and provides grounded Q&A responses through both a FastAPI backend and an interactive chat interface. The architecture supports semantic search with citation support, configurable response tones, and real-time conversation flow to ensure reliable, source-backed responses.
+This is a production-ready Retrieval Augmented Generation (RAG) system that combines web crawling, content indexing, and advanced conversational AI capabilities. The system automatically crawls websites using the Firecrawl API, processes and chunks the content, stores it in ChromaDB for vector search, and provides intelligent business conversations through both a FastAPI backend and an interactive chat interface. The architecture features conversation memory, query rewriting, Malaysian business tone, and real-time chat flow to ensure professional, context-aware customer interactions.
 
 ## User Preferences
 
@@ -41,10 +41,11 @@ Preferred communication style: Simple, everyday language.
 
 ### User Interface Architecture
 - **Web Crawler Interface**: Main page for website crawling and content management
-- **Interactive Chatbot Interface**: Real-time chat interface with conversation flow
+- **Enhanced Chatbot Interface**: Professional chat interface with Malaysian business persona
+- **Conversation Management**: Thread-based sessions with clear conversation history
 - **Responsive Design**: Mobile-friendly interfaces with modern UI components
 - **Cross-Navigation**: Seamless navigation between crawler and chat interfaces
-- **Real-time Features**: Typing indicators, message animations, and live source citations
+- **Advanced Features**: Conversation memory, greeting detection, query rewriting, and portfolio integration
 
 ### Configuration Management
 - **Environment-Based**: Centralized settings with .env file support
@@ -56,9 +57,11 @@ Preferred communication style: Simple, everyday language.
 1. **Crawling**: Firecrawl API extracts website content with proper URL extraction from metadata
 2. **Processing**: Content is cleaned, chunked, and embedded using OpenAI text-embedding-3-large
 3. **Indexing**: Vectors and metadata stored in ChromaDB with authentic page URLs
-4. **Retrieval**: Semantic search finds relevant content chunks based on similarity thresholds
-5. **Tone Selection**: Dynamic system prompt loading based on user-specified tone type
-6. **Response**: Grounded answers with authentic source citations and configurable response style
+4. **Conversation Management**: Session tracking with thread IDs and conversation memory
+5. **Query Processing**: Intelligent query rewriting based on conversation context
+6. **Retrieval**: Enhanced semantic search with reranking and diversity filtering
+7. **Response Generation**: Malaysian business tone with conversation context and postprocessing
+8. **Memory Update**: Conversation summarization for long-term context retention
 
 ## External Dependencies
 

@@ -2,15 +2,17 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from app.models import AskRequest, AskResponse, CrawlRequest, CrawlResponse
+from app.models import AskRequest, AskResponse, CrawlRequest, CrawlResponse, ChatRequest, ChatResponse
 from app.retriever import search
 from app.indexer import upsert_chunks
 from app.chunking import TextChunker
 from app.config import OPENAI_API_KEY
 from crawler.firecrawl_crawl import FirecrawlClient
+from chromadb import PersistentClient
 import requests
 import time
 import os
+import re
 
 app = FastAPI(title="RAG Site API", version="1.0.0")
 
@@ -25,6 +27,25 @@ app.add_middleware(
 
 # Mount static files
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# Initialize ChromaDB client for chat functionality
+try:
+    chroma_client = PersistentClient(path="./data/chroma")
+    try:
+        chroma_collection = chroma_client.get_collection("docs")
+    except:
+        chroma_collection = None  # Will be created when first document is indexed
+except Exception:
+    chroma_client = None
+    chroma_collection = None
+
+# In-memory session store (replace with Redis/DB in prod)
+CHAT_SESSIONS = {}  # {thread_id: {"summary": str, "turns": [(role, content), ...], "first_turn": bool}}
+
+TONE_PROMPT = """You are replying as a Malaysian business owner from {company}. Use "I/we".
+Keep answers short (1–2 sentences), polite, friendly, professional. No exclamation marks,
+no bold/bullets, no AI phrases. Only greet on first user greeting.
+"""
 
 @app.get("/")
 async def root():
@@ -60,15 +81,111 @@ def load_system_prompt(tone_type: str = "customer_support") -> str:
                 "Cite sources by listing their URLs at the end."
             )
 
-def call_chat(messages):
-    r = requests.post(
-        "https://api.openai.com/v1/chat/completions",
-        headers={"Authorization": f"Bearer {OPENAI_API_KEY}", "Content-Type": "application/json"},
-        json={"model": "gpt-4o-mini", "messages": messages, "temperature": 0.2},
-        timeout=120
-    )
-    r.raise_for_status()
-    return r.json()["choices"][0]["message"]["content"]
+def call_chat(messages, temperature=0.2, max_tokens=None):
+    try:
+        json_data = {
+            "model": "gpt-4o-mini",
+            "messages": messages, 
+            "temperature": temperature
+        }
+        if max_tokens:
+            json_data["max_tokens"] = max_tokens
+            
+        r = requests.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers={"Authorization": f"Bearer {OPENAI_API_KEY}", "Content-Type": "application/json"},
+            json=json_data,
+            timeout=120
+        )
+        r.raise_for_status()
+        return r.json()["choices"][0]["message"]["content"]
+    except requests.exceptions.HTTPError as e:
+        if e.response.status_code == 503:
+            return "I'm temporarily unable to respond due to high demand. Please try again in a moment."
+        raise e
+
+def is_greeting(txt: str) -> bool:
+    return bool(re.match(r'^\s*(hi|hello|hey|morning|good (morning|afternoon|evening))\b', txt.strip(), re.I))
+
+def postprocess(text: str, first_turn: bool) -> str:
+    # remove exclamation marks, overly generic assistant phrasing
+    text = re.sub(r'\bassist you\b', 'help you', text, flags=re.I).replace('!', '').strip()
+    if not first_turn:
+        text = re.sub(r'^\s*(hi|hello|hey)[^a-z0-9]+', '', text, flags=re.I).strip()
+    # cap 2 sentences
+    parts = re.split(r'(?<=[.?!])\s+', text)
+    return ' '.join(parts[:2]).strip()
+
+def summarise(previous_summary, user_msg, assistant_msg):
+    prompt = f"""Update the conversation summary (<=500 tokens), capturing user intent, decisions, names,
+preferences, and open items. First-person where relevant; no greetings.
+
+previous_summary:
+{previous_summary or ''}
+
+latest_user:
+{user_msg}
+
+latest_assistant:
+{assistant_msg}
+"""
+    try:
+        out = call_chat([
+            {"role":"system","content":"You maintain a compact memory for continuity. Return only the updated summary."},
+            {"role":"user","content": prompt}
+        ], max_tokens=400)
+        return out
+    except:
+        return previous_summary or ""
+
+def rewrite_query(summary, user_msg):
+    prompt = f"""Rewrite the user's question into a standalone query for retrieval.
+Use conversation_summary to resolve pronouns and include names/dates/scope.
+Return only the rewritten query.
+
+conversation_summary:
+{summary or ''}
+
+user_question:
+{user_msg}
+"""
+    try:
+        return call_chat([
+            {"role":"system","content":"You turn follow-up questions into standalone queries. Return only the query."},
+            {"role":"user","content": prompt}
+        ], max_tokens=120)
+    except:
+        return user_msg
+
+def retrieve_for_chat(query, k=20):
+    if not chroma_collection:
+        return {"documents": [[]], "metadatas": [[]], "distances": [[]]}
+    try:
+        return chroma_collection.query(query_texts=[query], n_results=k, include=["documents","metadatas","distances"])
+    except:
+        return {"documents": [[]], "metadatas": [[]], "distances": [[]]}
+
+def rerank(query, hits, topn=5):
+    # Optional: apply a cross-encoder or heuristic MMR
+    # For now, simple diversity by section + distance score
+    docs = hits["documents"][0]; metas = hits["metadatas"][0]; dists = hits["distances"][0]
+    triples = list(zip(docs, metas, dists))
+    # naive: sort by distance then pick diverse sections
+    triples.sort(key=lambda x: x[2])
+    seen = set(); out=[]
+    for t in triples:
+        sec = t[1].get("section") if t[1] else None
+        if sec in seen: continue
+        seen.add(sec); out.append(t)
+        if len(out)>=topn: break
+    return out
+
+def build_context(snippets):
+    parts=[]
+    for doc, meta, dist in snippets:
+        title = meta.get("title","") if meta else ""
+        parts.append(f"[{title}] {doc}")
+    return "\n\n".join(parts[:3])
 
 @app.post("/ask", response_model=AskResponse)
 def ask(req: AskRequest):
@@ -96,6 +213,62 @@ def ask(req: AskRequest):
     ]
     answer = call_chat(msg)
     return AskResponse(answer=answer, sources=list(dict.fromkeys(sources)))
+
+@app.post("/chat", response_model=ChatResponse)
+def chat_endpoint(req: ChatRequest):
+    """Enhanced chat endpoint with conversation memory and Malaysian business tone."""
+    st = CHAT_SESSIONS.setdefault(req.thread_id, {"summary":"", "turns":[], "first_turn":True})
+    first_turn = st["first_turn"]
+
+    # Greeting short-circuit (no retrieval)
+    if is_greeting(req.user_message):
+        if first_turn:
+            reply = f"Hi there, this is {req.name} here from {req.company}. How may I help you today?"
+        else:
+            reply = "Hi again—how can I help?"
+        st["turns"].append(("user", req.user_message)); st["turns"].append(("assistant", reply))
+        st["summary"] = summarise(st["summary"], req.user_message, reply)
+        st["first_turn"] = False
+        return ChatResponse(answer=reply, sources=[])
+
+    # Query rewrite -> retrieval -> context
+    rewritten = rewrite_query(st["summary"], req.user_message)
+    hits = retrieve_for_chat(rewritten)
+    top = rerank(rewritten, hits, topn=5)
+    context = build_context(top)
+
+    # Build messages
+    system_prompt = TONE_PROMPT.format(company=req.company)
+    messages = [
+        {"role":"system","content": system_prompt},
+        {"role":"system","content": f"Conversation summary:\n{st['summary'][:2000]}"},
+        {"role":"system","content": f"Relevant context (snippets):\n{context}"},
+    ]
+    # Add short history (last 2 turns)
+    for role, content in st["turns"][-4:]:
+        messages.append({"role":role, "content":content})
+    messages.append({"role":"user","content": req.user_message})
+
+    try:
+        raw = call_chat(messages, temperature=0.3, max_tokens=160)
+        reply = postprocess(raw, first_turn=False)
+    except Exception as e:
+        reply = "I'm having trouble responding right now. Could you please try again?"
+
+    # Auto-append portfolio for "why choose" intent
+    if re.search(r'\bwhy\b.*\bchoose\b', req.user_message, re.I) and req.portfolio_url and "Portfolio" not in reply:
+        reply = f"{reply} Portfolio: {req.portfolio_url}"
+
+    # Update memory
+    st["turns"].append(("user", req.user_message)); st["turns"].append(("assistant", reply))
+    st["summary"] = summarise(st["summary"], req.user_message, reply)
+    st["first_turn"] = False
+
+    # Optional: include source URLs back
+    sources = []
+    for _, meta, _ in top:
+        if meta and "url" in meta: sources.append(meta["url"])
+    return ChatResponse(answer=reply, sources=sources[:3])
 
 @app.post("/crawl", response_model=CrawlResponse)
 async def crawl(request: CrawlRequest):

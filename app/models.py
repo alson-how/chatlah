@@ -48,6 +48,21 @@ class AskResponse(BaseModel):
     sources: List[str] = Field(..., description="Source URLs used for the answer")
 
 
+class ChatRequest(BaseModel):
+    """Request model for chat conversation."""
+    thread_id: str = Field(..., description="Conversation thread ID")
+    user_message: str = Field(..., min_length=1, max_length=1000, description="User message")
+    name: str = Field(default="Mei Yee", description="Business owner name")
+    company: str = Field(default="Jablanc Interior", description="Company name")
+    portfolio_url: str = Field(default="", description="Portfolio URL (optional)")
+
+
+class ChatResponse(BaseModel):
+    """Response model for chat conversation."""
+    answer: str = Field(..., description="Assistant response")
+    sources: Optional[List[str]] = Field(default=[], description="Source URLs used for the answer")
+
+
 class HealthResponse(BaseModel):
     """Response model for health check."""
     status: str

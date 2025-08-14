@@ -48,18 +48,19 @@
             align-items: center;
         }
 
-        .tone-selector {
+        .clear-btn {
             background: rgba(255,255,255,0.2);
             border: 1px solid rgba(255,255,255,0.3);
             color: white;
             padding: 5px 10px;
             border-radius: 5px;
             font-size: 0.9rem;
+            cursor: pointer;
+            transition: background 0.3s;
         }
 
-        .tone-selector option {
-            background: #667eea;
-            color: white;
+        .clear-btn:hover {
+            background: rgba(255,255,255,0.3);
         }
 
         .back-btn {
@@ -295,13 +296,9 @@
 <body>
     <div class="chat-container">
         <div class="chat-header">
-            <h1>RAG Chatbot</h1>
+            <h1>Jablanc Interior Chat</h1>
             <div class="header-controls">
-                <select class="tone-selector" id="toneSelector">
-                    <option value="customer_support">Customer Support</option>
-                    <option value="technical">Technical</option>
-                    <option value="casual">Casual</option>
-                </select>
+                <button class="clear-btn" id="clearBtn">🗑️ New Chat</button>
                 <a href="/" class="back-btn">← Back to Crawler</a>
             </div>
         </div>
@@ -311,14 +308,14 @@
                 <h3>Welcome to RAG Chatbot!</h3>
                 <p>Ask me anything about the content you've crawled. I'll provide answers based on your indexed website data.</p>
                 <div class="example-questions">
-                    <button class="example-btn" onclick="askExample('What is this website about?')">
-                        What is this website about?
+                    <button class="example-btn" onclick="askExample('Hello, I would like to know about your interior design services')">
+                        Hello, I would like to know about your interior design services
                     </button>
-                    <button class="example-btn" onclick="askExample('Tell me about the main features')">
-                        Tell me about the main features
+                    <button class="example-btn" onclick="askExample('What makes your company different from others?')">
+                        What makes your company different from others?
                     </button>
-                    <button class="example-btn" onclick="askExample('How does this service work?')">
-                        How does this service work?
+                    <button class="example-btn" onclick="askExample('Can you tell me about your portfolio?')">
+                        Can you tell me about your portfolio?
                     </button>
                 </div>
             </div>
@@ -351,7 +348,7 @@
         const chatInput = document.getElementById('chatInput');
         const sendBtn = document.getElementById('sendBtn');
         const chatForm = document.getElementById('chatForm');
-        const toneSelector = document.getElementById('toneSelector');
+        const clearBtn = document.getElementById('clearBtn');
         const typingIndicator = document.getElementById('typingIndicator');
         const emptyState = document.getElementById('emptyState');
 
@@ -457,15 +454,24 @@
             showTyping();
 
             try {
-                const response = await fetch('/ask', {
+                // Generate or get thread ID
+                let threadId = localStorage.getItem('chatThreadId');
+                if (!threadId) {
+                    threadId = 'chat_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+                    localStorage.setItem('chatThreadId', threadId);
+                }
+
+                const response = await fetch('/chat', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify({
-                        question: question,
-                        tone_type: toneSelector.value,
-                        top_k: 6
+                        thread_id: threadId,
+                        user_message: question,
+                        name: "Mei Yee",
+                        company: "Jablanc Interior",
+                        portfolio_url: ""
                     })
                 });
 
@@ -474,7 +480,7 @@
                 hideTyping();
                 
                 if (response.ok) {
-                    addMessage(data.answer, false, data.sources);
+                    addMessage(data.answer, false, data.sources || []);
                 } else {
                     addMessage('Sorry, I encountered an error. Please try again.', false);
                 }
@@ -495,16 +501,22 @@
             chatInput.focus();
         });
 
-        // Save tone preference
-        toneSelector.addEventListener('change', function() {
-            localStorage.setItem('preferredTone', this.value);
+        // Clear conversation functionality
+        clearBtn.addEventListener('click', function() {
+            if (confirm('Start a new conversation? This will clear the current chat history.')) {
+                // Clear the thread ID to start a new conversation
+                localStorage.removeItem('chatThreadId');
+                
+                // Clear chat messages
+                chatMessages.innerHTML = '';
+                
+                // Show empty state again
+                emptyState.style.display = 'flex';
+                
+                // Focus on input
+                chatInput.focus();
+            }
         });
-
-        // Load saved tone preference
-        const savedTone = localStorage.getItem('preferredTone');
-        if (savedTone) {
-            toneSelector.value = savedTone;
-        }
     </script>
 </body>
 </html>
