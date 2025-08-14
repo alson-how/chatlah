@@ -78,6 +78,16 @@ Preferred communication style: Simple, everyday language.
 - **ChromaDB**: Open-source vector database for embedding storage and similarity search
 - **Persistent Storage**: Local file-based storage in configurable directory path
 
+### Lead Database
+- **PostgreSQL**: Production database for persistent lead storage and management
+- **Tables**: leads table with comprehensive contact tracking, theme interests, and timestamps
+- **Environment Variables**: DATABASE_URL, PGHOST, PGPORT, PGUSER, PGPASSWORD, PGDATABASE
+
+### Lead Database
+- **PostgreSQL**: Production database for persistent lead storage and management
+- **Tables**: leads table with comprehensive contact tracking, theme interests, and timestamps
+- **Environment Variables**: DATABASE_URL, PGHOST, PGPORT, PGUSER, PGPASSWORD, PGDATABASE
+
 ### Machine Learning Models
 - **OpenAI Embeddings API**: Advanced text embedding generation service
 - **Model**: text-embedding-3-large for high-quality semantic embeddings (3072 dimensions)
@@ -90,6 +100,10 @@ Preferred communication style: Simple, everyday language.
 ### Content Processing
 - **BeautifulSoup4**: HTML parsing and content extraction
 - **Pydantic**: Data validation and settings management
+
+### Database Management
+- **psycopg2-binary**: PostgreSQL adapter for Python database operations
+- **Lead Management**: Automated contact collection with persistent storage
 
 ### Required Integrations
 - **OpenAI API**: Primary embedding service (requires OPENAI_API_KEY)

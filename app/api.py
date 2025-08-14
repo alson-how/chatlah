@@ -11,6 +11,7 @@ from crawler.firecrawl_crawl import FirecrawlClient
 from chromadb import PersistentClient
 from utils.theme import mentions_theme, resolve_theme_url
 from utils.lead import extract_name, extract_phone, is_lead_only
+from app.database import save_lead, get_lead, get_all_leads
 import requests
 import time
 import os
@@ -62,10 +63,24 @@ async def chat():
     """Serve the chat interface."""
     return FileResponse("static/chat.html")
 
+@app.get("/leads-dashboard")
+async def leads_dashboard():
+    """Serve the leads dashboard interface."""
+    return FileResponse("static/leads.html")
+
 
 @app.get("/health")
 def health():
     return {"ok": True}
+
+@app.get("/leads")
+def leads_endpoint():
+    """Get all leads from database"""
+    try:
+        leads = get_all_leads()
+        return {"leads": leads, "count": len(leads)}
+    except Exception as e:
+        return {"error": str(e), "leads": [], "count": 0}
 
 
 def load_system_prompt(tone_type: str = "customer_support") -> str:
@@ -283,6 +298,28 @@ def chat_endpoint(req: ChatRequest):
         st["name"] = name
     if phone:
         st["phone"] = phone
+    
+    # Save to database when we have both name and phone
+    if st.get("name") and st.get("phone"):
+        try:
+            # Get the first message from conversation history
+            first_msg = st.get("turns")[0][1] if st.get("turns") and len(st.get("turns")) > 0 else user_text
+            # Determine theme interest from conversation
+            theme_interest = ""
+            for turn in st.get("turns", []):
+                if mentions_theme(turn[1]) and turn[0] == "user":
+                    theme_interest = turn[1]
+                    break
+            
+            save_lead(
+                name=st["name"], 
+                phone=st["phone"], 
+                thread_id=req.thread_id,
+                first_message=first_msg,
+                theme_interest=theme_interest
+            )
+        except Exception as e:
+            print(f"Error saving lead: {e}")
     
     # Lead-only short-circuit (runs BEFORE greeting + LLM)
     if is_lead_only(user_text) or (name and phone and not need_contact(st)):
