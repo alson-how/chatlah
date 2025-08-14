@@ -10,6 +10,7 @@ from app.config import OPENAI_API_KEY
 from crawler.firecrawl_crawl import FirecrawlClient
 from chromadb import PersistentClient
 from utils.theme import mentions_theme, resolve_theme_url
+from utils.lead import extract_name, extract_phone, is_lead_only
 import requests
 import time
 import os
@@ -273,6 +274,27 @@ def chat_endpoint(req: ChatRequest):
         "first_turn": True
     })
     first_turn = st["first_turn"]
+    
+    # Extract and store contact information from every message
+    user_text = req.user_message
+    name = extract_name(user_text)
+    phone = extract_phone(user_text)
+    if name:
+        st["name"] = name
+    if phone:
+        st["phone"] = phone
+    
+    # Lead-only short-circuit (runs BEFORE greeting + LLM)
+    if is_lead_only(user_text) or (name and phone and not need_contact(st)):
+        final_name = st.get("name", "there")
+        reply = f"Thank you {final_name}, I'll be contacting you soon."
+        # Mark that we've captured lead so we don't ask again
+        st["lead_captured"] = True
+        st["turns"].append(("user", req.user_message))
+        st["turns"].append(("assistant", reply))
+        st["summary"] = summarise(st["summary"], req.user_message, reply)
+        st["first_turn"] = False
+        return ChatResponse(answer=reply, sources=[])
 
     # Greeting short-circuit (no retrieval)
     if is_greeting(req.user_message):
@@ -291,7 +313,7 @@ def chat_endpoint(req: ChatRequest):
         url = resolve_theme_url(req.user_message)
         if url:
             if need_contact(st):
-                reply = f"Sure, here you go {url}. May I have your name and phone number so I can follow up properly?"
+                reply = f"Sure, here's the project we did before {url}. May I have your name and phone number so I can follow up properly?"
             else:
                 reply = f"Sure—here's one project that fits: {url}"
         else:

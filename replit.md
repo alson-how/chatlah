@@ -47,7 +47,7 @@ Preferred communication style: Simple, everyday language.
 - **Conversation Management**: Thread-based sessions with clear conversation history
 - **Responsive Design**: Mobile-friendly interfaces with modern UI components
 - **Cross-Navigation**: Seamless navigation between crawler and chat interfaces
-- **Advanced Features**: Conversation memory, greeting detection, query rewriting, portfolio integration, and contact information collection for theme requests
+- **Advanced Features**: Conversation memory, greeting detection, query rewriting, portfolio integration, automatic lead extraction, and intelligent contact information collection with business acknowledgment
 
 ### Configuration Management
 - **Environment-Based**: Centralized settings with .env file support
@@ -60,11 +60,13 @@ Preferred communication style: Simple, everyday language.
 2. **Processing**: Content is cleaned, chunked, and embedded using OpenAI text-embedding-3-large
 3. **Indexing**: Vectors and metadata stored in ChromaDB with authentic page URLs
 4. **Conversation Management**: Session tracking with thread IDs and conversation memory
-5. **Theme Detection with Contact**: Automatic style/aesthetic intent recognition with portfolio URL mapping and contact information collection
-6. **Query Processing**: Intelligent query rewriting based on conversation context
-7. **Retrieval**: Enhanced semantic search with reranking and diversity filtering
-8. **Response Generation**: Malaysian business tone with conversation context, theme URLs, and postprocessing
-9. **Memory Update**: Conversation summarization for long-term context retention
+5. **Lead Extraction**: Automatic name and phone number extraction from every user message with intelligent contact validation
+6. **Lead Processing**: Contact-only message detection with immediate acknowledgment and lead capture confirmation
+7. **Theme Detection with Contact**: Automatic style/aesthetic intent recognition with portfolio URL mapping and contact information collection
+8. **Query Processing**: Intelligent query rewriting based on conversation context
+9. **Retrieval**: Enhanced semantic search with reranking and diversity filtering
+10. **Response Generation**: Malaysian business tone with conversation context, theme URLs, and postprocessing
+11. **Memory Update**: Conversation summarization for long-term context retention
 
 ## External Dependencies
 
