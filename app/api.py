@@ -31,6 +31,11 @@ async def root():
     """Serve the main web interface."""
     return FileResponse("static/index.html")
 
+@app.get("/chat")
+async def chat():
+    """Serve the chat interface."""
+    return FileResponse("static/chat.html")
+
 @app.get("/health")
 def health():
     return {"ok": True}

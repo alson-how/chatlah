@@ -2,7 +2,7 @@
 
 ## Overview
 
-This is a production-ready Retrieval Augmented Generation (RAG) system that combines web crawling, content indexing, and question-answering capabilities. The system automatically crawls websites using the Firecrawl API, processes and chunks the content, stores it in ChromaDB for vector search, and provides grounded Q&A responses through a FastAPI backend. The architecture supports semantic search with citation support and similarity scoring to ensure reliable, source-backed responses.
+This is a production-ready Retrieval Augmented Generation (RAG) system that combines web crawling, content indexing, and interactive chatbot capabilities. The system automatically crawls websites using the Firecrawl API, processes and chunks the content, stores it in ChromaDB for vector search, and provides grounded Q&A responses through both a FastAPI backend and an interactive chat interface. The architecture supports semantic search with citation support, configurable response tones, and real-time conversation flow to ensure reliable, source-backed responses.
 
 ## User Preferences
 
@@ -38,6 +38,13 @@ Preferred communication style: Simple, everyday language.
 - **Ask Endpoint**: Question-answering with source citations, confidence scoring, and configurable response tone
 - **Request/Response Models**: Pydantic models for validation and API documentation
 - **Dynamic Tone System**: Configurable response styles (customer_support, technical, casual) loaded from external files
+
+### User Interface Architecture
+- **Web Crawler Interface**: Main page for website crawling and content management
+- **Interactive Chatbot Interface**: Real-time chat interface with conversation flow
+- **Responsive Design**: Mobile-friendly interfaces with modern UI components
+- **Cross-Navigation**: Seamless navigation between crawler and chat interfaces
+- **Real-time Features**: Typing indicators, message animations, and live source citations
 
 ### Configuration Management
 - **Environment-Based**: Centralized settings with .env file support

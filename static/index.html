@@ -45,6 +45,24 @@
         .header p {
             font-size: 1.1rem;
             opacity: 0.9;
+            margin-bottom: 1.5rem;
+        }
+
+        .chat-button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 12px 24px;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 600;
+            display: inline-block;
+            transition: all 0.3s;
+            font-size: 1rem;
+        }
+
+        .chat-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3);
         }
         
         .main {
@@ -263,6 +281,7 @@
         <div class="header">
             <h1>RAG System</h1>
             <p>Crawl websites and ask questions about their content</p>
+            <a href="/chat" class="chat-button">💬 Open Chatbot</a>
         </div>
         
         <div class="main">
