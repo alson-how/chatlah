@@ -9,7 +9,6 @@ from app.chunking import TextChunker
 from app.config import OPENAI_API_KEY
 from crawler.firecrawl_crawl import FirecrawlClient
 from chromadb import PersistentClient
-from app.theme_router import detect_theme_query, find_theme_url
 from utils.theme import mentions_theme, resolve_theme_url
 import requests
 import time
@@ -289,11 +288,12 @@ def chat_endpoint(req: ChatRequest):
 
     # Theme detection with contact handling
     if mentions_theme(req.user_message):
-        print("Theme detected!" + req.user_message)
-        url = find_theme_url(req.user_message)
+        print(f"THEME DETECTED: '{req.user_message}'")
+        url = resolve_theme_url(req.user_message)
+        print(f"RESOLVED URL: '{url}'")
         if url:
             if need_contact(st):
-                reply = f"Sure—here's one project that fits: {url}. May I have your name and phone number so I can follow up properly?"
+                reply = f"Sure, here you go {url}. May I have your name and phone number so I can follow up properly?"
             else:
                 reply = f"Sure—here's one project that fits: {url}"
         else:
@@ -307,8 +307,10 @@ def chat_endpoint(req: ChatRequest):
 
     # 1) Detect style/feel intent and find theme URL
     theme_url = ""
-    if detect_theme_query(req.user_message):
-        theme_url = find_theme_url(req.user_message)
+    if mentions_theme(req.user_message):
+        print(f"SECONDARY THEME CHECK: '{req.user_message}'")
+        theme_url = resolve_theme_url(req.user_message)
+        print(f"SECONDARY THEME URL: '{theme_url}'")
 
     # Query rewrite -> retrieval -> context
     rewritten = rewrite_query(st["summary"], req.user_message)
