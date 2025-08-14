@@ -289,9 +289,9 @@ def chat_endpoint(req: ChatRequest):
         "first_turn": True
     })
     first_turn = st["first_turn"]
+    user_text = req.user_message
     
     # Extract and store contact information from every message
-    user_text = req.user_message
     name = extract_name(user_text)
     phone = extract_phone(user_text)
     if name:
