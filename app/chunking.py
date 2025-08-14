@@ -133,11 +133,15 @@ class TextChunker:
         if not cleaned_content:
             return []
         
-        # Prepare metadata
+        # Prepare metadata - ensure URL is properly extracted
+        url = page_data.get('url', '')
+        if not url and 'metadata' in page_data:
+            url = page_data['metadata'].get('url', '')
+        
         metadata = {
-            'url': page_data.get('url', ''),
-            'title': page_data.get('title', ''),
-            'description': page_data.get('description', ''),
+            'url': url if url else 'unknown',
+            'title': page_data.get('title', '') or 'Untitled',
+            'description': page_data.get('description', '') or '',
             'source': 'firecrawl'
         }
         

@@ -30,7 +30,7 @@ class CrawledPage(BaseModel):
 class AskRequest(BaseModel):
     """Request model for asking questions."""
     question: str = Field(..., min_length=1, max_length=1000, description="Question to ask")
-    max_results: int = Field(default=5, ge=1, le=20, description="Maximum number of results to return")
+    top_k: Optional[int] = Field(default=5, ge=1, le=20, description="Maximum number of results to return")
 
 
 class SourceDocument(BaseModel):
@@ -44,9 +44,7 @@ class SourceDocument(BaseModel):
 class AskResponse(BaseModel):
     """Response model for question answering."""
     answer: str = Field(..., description="Generated answer")
-    sources: List[SourceDocument] = Field(..., description="Source documents used for the answer")
-    confidence: float = Field(..., description="Confidence score of the answer")
-    question: str = Field(..., description="Original question")
+    sources: List[str] = Field(..., description="Source URLs used for the answer")
 
 
 class HealthResponse(BaseModel):

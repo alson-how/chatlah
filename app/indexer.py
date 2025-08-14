@@ -30,18 +30,44 @@ def upsert_chunks(chunks: List[Dict]):
     """Upsert chunks into ChromaDB with OpenAI embeddings."""
     if not chunks:
         return
-    texts = [c["text"] for c in chunks]
-    ids = [hashlib.sha256(f'{c["url"]}-{c["chunk_idx"]}-{c["text"]}'.encode()).hexdigest() for c in chunks]
-    metas = [{"url": c["url"], "title": c["title"], "chunk_idx": c["chunk_idx"]} for c in chunks]
-
-    # Avoid re-embedding duplicates by filtering out existing ids
-    existing = set()
-    try:
-        # Chroma currently needs a small paging trick to check existence; for brevity we skip.
-        # In small projects it's okay to try upsert directly; Chroma will update by id.
-        pass
-    except Exception:
-        pass
+    
+    # Clean and validate data
+    valid_chunks = []
+    for c in chunks:
+        # Ensure all required fields are present and valid
+        text = str(c.get("text", "")).strip()
+        url = str(c.get("url", "unknown")).strip()
+        title = str(c.get("title", "Untitled")).strip()
+        chunk_idx = c.get("chunk_idx", 0)
+        scraped_at = str(c.get("scraped_at", ""))
+        
+        if not text:  # Skip empty chunks
+            continue
+            
+        valid_chunks.append({
+            "text": text,
+            "url": url,
+            "title": title,
+            "chunk_idx": int(chunk_idx) if isinstance(chunk_idx, (int, float)) else 0,
+            "scraped_at": scraped_at
+        })
+    
+    if not valid_chunks:
+        return
+    
+    texts = [c["text"] for c in valid_chunks]
+    ids = [hashlib.sha256(f'{c["url"]}-{c["chunk_idx"]}-{c["text"]}'.encode()).hexdigest() for c in valid_chunks]
+    
+    # Create clean metadata - ensure all values are strings, ints, floats, or bools
+    metas = []
+    for c in valid_chunks:
+        meta = {
+            "url": c["url"],
+            "title": c["title"],
+            "chunk_idx": c["chunk_idx"],
+            "scraped_at": c["scraped_at"] if c["scraped_at"] else "unknown"
+        }
+        metas.append(meta)
 
     embeddings = embed_texts(texts)
     collection.upsert(ids=ids, embeddings=embeddings, metadatas=metas, documents=texts)

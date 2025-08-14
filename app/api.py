@@ -1,26 +1,17 @@
-"""FastAPI application with health and ask endpoints."""
-
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-import uvicorn
-from typing import Dict, Any, List
+from app.models import AskRequest, AskResponse, CrawlRequest, CrawlResponse
+from app.retriever import search
+from app.indexer import upsert_chunks
+from app.chunking import TextChunker
+from app.config import OPENAI_API_KEY
+from crawler.firecrawl_crawl import FirecrawlClient
+import requests
+import time
 
-from app.models import (
-    AskRequest, AskResponse, HealthResponse, ErrorResponse,
-    CrawlRequest, CrawlResponse, CrawledPage
-)
-from app.retriever import ContentRetriever
-from app.config import settings
-from app import __version__
-
-# Initialize FastAPI app
-app = FastAPI(
-    title="RAG System API",
-    description="A FastAPI-based RAG system with Firecrawl crawling and Chroma indexing",
-    version=__version__
-)
+app = FastAPI(title="RAG Site API", version="1.0.0")
 
 # Add CORS middleware
 app.add_middleware(
@@ -34,161 +25,134 @@ app.add_middleware(
 # Mount static files
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# Initialize retriever
-retriever = ContentRetriever()
-
-
-@app.exception_handler(Exception)
-async def general_exception_handler(request, exc):
-    """Handle general exceptions."""
-    return JSONResponse(
-        status_code=500,
-        content=ErrorResponse(
-            error="Internal Server Error",
-            detail=str(exc),
-            status_code=500
-        ).dict()
-    )
-
-
 @app.get("/")
 async def root():
     """Serve the main web interface."""
     return FileResponse("static/index.html")
 
+@app.get("/health")
+def health():
+    return {"ok": True}
 
-@app.get("/health", response_model=HealthResponse)
-async def health_check():
-    """Health check endpoint."""
-    try:
-        # Check database status
-        db_status = retriever.get_database_status()
-        
-        health_response = HealthResponse(
-            status="healthy" if db_status["status"] == "healthy" else "degraded",
-            version=__version__,
-            database_status=db_status["status"],
-            indexed_documents=db_status["total_documents"]
-        )
-        
-        return health_response
-    
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Health check failed: {str(e)}"
-        )
+SYSTEM_PROMPT = (
+    "You are a company knowledge assistant. "
+    "Answer ONLY using the provided context. "
+    "If the answer isn't in context, say you don't have that information. "
+    "Cite sources by listing their URLs at the end."
+)
 
+def call_chat(messages):
+    r = requests.post(
+        "https://api.openai.com/v1/chat/completions",
+        headers={"Authorization": f"Bearer {OPENAI_API_KEY}", "Content-Type": "application/json"},
+        json={"model": "gpt-4o-mini", "messages": messages, "temperature": 0.2},
+        timeout=120
+    )
+    r.raise_for_status()
+    return r.json()["choices"][0]["message"]["content"]
 
 @app.post("/ask", response_model=AskResponse)
-async def ask_question(request: AskRequest):
-    """Ask a question and get a grounded response."""
-    try:
-        # Validate request
-        if not request.question.strip():
-            raise HTTPException(
-                status_code=400,
-                detail="Question cannot be empty"
-            )
-        
-        # Check if database has content
-        db_status = retriever.get_database_status()
-        if db_status["total_documents"] == 0:
-            return AskResponse(
-                answer="No content has been indexed yet. Please run the crawling and indexing pipeline first.",
-                sources=[],
-                confidence=0.0,
-                question=request.question
-            )
-        
-        # Process the question
-        response = retriever.ask_question(
-            question=request.question,
-            max_results=request.max_results
-        )
-        
-        return response
-    
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to process question: {str(e)}"
-        )
+def ask(req: AskRequest):
+    hits = search(req.question, top_k=req.top_k or 6)
+    if not hits:
+        return AskResponse(answer="I don't have that information in my knowledge base.", sources=[])
 
+    # Compose context
+    sources = []
+    ctx_lines = []
+    for h in hits:
+        url = h["meta"]["url"]
+        title = h["meta"]["title"]
+        text = h["text"]
+        ctx_lines.append(f"[{title}] {text}\n(Source: {url})\n")
+        sources.append(url)
+
+    user = f"Question: {req.question}\n\nContext:\n" + "\n".join(ctx_lines[:6])
+    msg = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": user}
+    ]
+    answer = call_chat(msg)
+    return AskResponse(answer=answer, sources=list(dict.fromkeys(sources)))
 
 @app.post("/crawl", response_model=CrawlResponse)
-async def crawl_website(request: CrawlRequest):
-    """Crawl and index a website."""
+async def crawl(request: CrawlRequest):
+    """Crawl a website and index its content."""
     try:
-        # Import crawler here to avoid circular imports
-        from crawler.firecrawl_crawl import FirecrawlClient
-        
-        # Validate Firecrawl API key
-        if not settings.firecrawl_api_key:
-            raise HTTPException(
-                status_code=400,
-                detail="Firecrawl API key not configured. Please set FIRECRAWL_API_KEY environment variable."
-            )
-        
-        # Create crawler instance
-        crawler = FirecrawlClient(api_key=settings.firecrawl_api_key)
-        
         # Crawl the website
-        pages = crawler.crawl_website(
+        client = FirecrawlClient()
+        pages_data = client.crawl_website(
             url=str(request.target_url),
             max_pages=request.max_pages,
             include_subdomains=request.include_subdomains
         )
         
-        pages_crawled = len(pages) if pages else 0
-        chunks_indexed = 0
+        if not pages_data:
+            raise HTTPException(status_code=400, detail="Failed to crawl any pages from the website")
         
-        # Index the content
-        if pages:
-            result = retriever.indexer.index_multiple_pages(pages)
-            chunks_indexed = result.get('chunks_indexed', 0)
+        # Process and index the content
+        chunk_processor = TextChunker(chunk_size=1000, chunk_overlap=200)
+        total_chunks = 0
+        
+        for page_data in pages_data:
+            try:
+                # Process page content into chunks
+                chunks = chunk_processor.process_page_content(page_data)
+                
+                if chunks:
+                    # Convert to the format expected by upsert_chunks
+                    chunk_data = []
+                    for i, chunk in enumerate(chunks):
+                        chunk_data.append({
+                            "text": chunk['content'],
+                            "url": chunk['metadata'].get('url', ''),
+                            "title": chunk['metadata'].get('title', 'Untitled'),
+                            "chunk_idx": i,
+                            "scraped_at": str(time.time())
+                        })
+                    
+                    # Index the chunks
+                    upsert_chunks(chunk_data)
+                    total_chunks += len(chunk_data)
+            except Exception as e:
+                print(f"Failed to index page {page_data.get('url', 'unknown')}: {str(e)}")
+                continue
         
         return CrawlResponse(
             success=True,
-            pages_crawled=pages_crawled,
-            chunks_indexed=chunks_indexed,
-            message=f"Successfully crawled {pages_crawled} pages and indexed {chunks_indexed} content chunks."
+            pages_crawled=len(pages_data),
+            chunks_indexed=total_chunks,
+            message=f"Successfully crawled {len(pages_data)} pages and indexed {total_chunks} content chunks!"
         )
-    
-    except HTTPException:
-        raise
+        
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to crawl website: {str(e)}"
-        )
-
+        raise HTTPException(status_code=500, detail=f"Failed to crawl website: {str(e)}")
 
 @app.get("/crawled-pages")
-async def get_crawled_pages() -> List[CrawledPage]:
-    """Get list of all crawled pages."""
+async def get_crawled_pages():
+    """Get list of crawled pages with statistics."""
     try:
-        from collections import defaultdict
-        import chromadb
-        
-        # Connect to ChromaDB directly
-        client = chromadb.PersistentClient(path=settings.chroma_db_path)
-        collection = client.get_collection(settings.chroma_collection_name)
+        from app.indexer import collection
         
         # Get all documents with metadata
         results = collection.get(include=['metadatas'])
         
-        # Count chunks per URL and get titles
-        url_data = defaultdict(lambda: {'count': 0, 'title': '', 'last_crawled': None})
+        if not results['metadatas']:
+            return []
         
+        # Group by URL and collect statistics
+        url_data = {}
         for metadata in results['metadatas']:
             url = metadata.get('url', 'Unknown')
-            if url and url != 'Unknown':
+            if url != 'Unknown':
+                if url not in url_data:
+                    url_data[url] = {
+                        'count': 0,
+                        'title': metadata.get('title', 'Untitled'),
+                        'last_crawled': None
+                    }
                 url_data[url]['count'] += 1
-                if not url_data[url]['title'] and metadata.get('title'):
-                    url_data[url]['title'] = metadata.get('title', '')
+                
                 # Get the latest scraped time
                 scraped_at = metadata.get('scraped_at')
                 if scraped_at:
@@ -197,87 +161,24 @@ async def get_crawled_pages() -> List[CrawledPage]:
                         if not url_data[url]['last_crawled'] or scraped_timestamp > url_data[url]['last_crawled']:
                             url_data[url]['last_crawled'] = scraped_timestamp
                     except (ValueError, TypeError):
-                        pass  # Skip invalid timestamps
+                        pass
         
-        # Convert to CrawledPage objects
+        # Convert to response format
         crawled_pages = []
         for url, data in url_data.items():
-            from datetime import datetime
-            last_crawled_str = None
+            last_crawled = None
             if data['last_crawled']:
-                last_crawled_str = datetime.fromtimestamp(data['last_crawled']).strftime('%Y-%m-%d %H:%M:%S')
-                
-            crawled_pages.append(CrawledPage(
-                url=url,
-                title=data['title'] or url.split('/')[-1] or 'Untitled',
-                chunks_count=data['count'],
-                last_crawled=last_crawled_str
-            ))
-        
-        # Sort by number of chunks (descending)
-        crawled_pages.sort(key=lambda x: x.chunks_count, reverse=True)
+                from datetime import datetime
+                last_crawled = datetime.fromtimestamp(data['last_crawled']).strftime('%Y-%m-%d %H:%M:%S')
+            
+            crawled_pages.append({
+                "url": url,
+                "title": data['title'],
+                "chunks_count": data['count'],
+                "last_crawled": last_crawled
+            })
         
         return crawled_pages
-    
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to get crawled pages: {str(e)}"
-        )
-
-
-@app.get("/stats")
-async def get_stats():
-    """Get indexing statistics."""
-    try:
-        db_status = retriever.get_database_status()
-        stats = retriever.indexer.get_collection_stats()
         
-        return {
-            "database_status": db_status["status"],
-            "total_documents": db_status["total_documents"],
-            "collection_name": stats["collection_name"],
-            "embedding_model": stats["embedding_model"],
-            "config": {
-                "chunk_size": settings.chunk_size,
-                "chunk_overlap": settings.chunk_overlap,
-                "retrieval_k": settings.retrieval_k,
-                "similarity_threshold": settings.similarity_threshold
-            }
-        }
-    
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to get stats: {str(e)}"
-        )
-
-
-@app.delete("/clear")
-async def clear_database():
-    """Clear all indexed content."""
-    try:
-        success = retriever.indexer.clear_collection()
-        
-        if success:
-            return {"message": "Database cleared successfully"}
-        else:
-            raise HTTPException(
-                status_code=500,
-                detail="Failed to clear database"
-            )
-    
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to clear database: {str(e)}"
-        )
-
-
-if __name__ == "__main__":
-    uvicorn.run(
-        "app.api:app",
-        host=settings.api_host,
-        port=settings.api_port,
-        reload=True
-    )
+        raise HTTPException(status_code=500, detail=f"Failed to get crawled pages: {str(e)}")

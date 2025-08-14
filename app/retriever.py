@@ -1,146 +1,37 @@
-"""Content retrieval and response generation for RAG system."""
+"""Content retrieval and search functionality for RAG system."""
 
-from typing import List, Dict, Any, Optional
-from app.indexer import ContentIndexer
-from app.models import SourceDocument, AskResponse
-from app.config import settings
+from typing import List, Dict, Any
+from app.indexer import collection, embed_texts
 
-
-class ContentRetriever:
-    """Handles content retrieval and answer generation."""
-    
-    def __init__(self):
-        self.indexer = ContentIndexer()
-    
-    def get_database_status(self) -> Dict[str, Any]:
-        """Get database status for health checks."""
-        return self.indexer.get_database_status()
-    
-    def retrieve_relevant_content(self, question: str, max_results: int = 5) -> List[Dict[str, Any]]:
-        """Retrieve relevant content for a given question."""
-        try:
-            # Search for similar content
-            similar_content = self.indexer.search_similar_content(
-                query=question,
-                n_results=max_results
-            )
-            
-            # Filter results with a reasonable threshold
-            # Even low similarity scores can contain relevant information
-            min_threshold = 0.01  # Very permissive to capture relevant content
-            filtered_content = [
-                content for content in similar_content
-                if content['similarity_score'] > min_threshold
-            ]
-            return filtered_content
+def search(query: str, top_k: int = 5) -> List[Dict[str, Any]]:
+    """Search for relevant content using OpenAI embeddings."""
+    try:
+        # Generate embedding for the query using OpenAI
+        query_embedding = embed_texts([query])[0]
         
-        except Exception as e:
-            raise Exception(f"Failed to retrieve relevant content: {str(e)}")
-    
-    def format_source_documents(self, content_list: List[Dict[str, Any]]) -> List[SourceDocument]:
-        """Format retrieved content into SourceDocument objects."""
-        source_docs = []
+        # Search in Chroma using the embedding
+        results = collection.query(
+            query_embeddings=[query_embedding],
+            n_results=top_k,
+            include=['documents', 'metadatas', 'distances']
+        )
         
-        for content in content_list:
-            metadata = content.get('metadata', {})
-            
-            source_doc = SourceDocument(
-                content=content['content'],
-                url=metadata.get('url', ''),
-                title=metadata.get('title', 'Untitled'),
-                similarity_score=content['similarity_score']
-            )
-            
-            source_docs.append(source_doc)
+        # Process results
+        hits = []
+        if results['documents'] and results['documents'][0]:
+            for i in range(len(results['documents'][0])):
+                distance = results['distances'][0][i]
+                # For cosine distance, similarity = 1 - distance
+                similarity = max(0, 1 - distance)
+                
+                hits.append({
+                    'text': results['documents'][0][i],
+                    'meta': results['metadatas'][0][i],
+                    'similarity_score': similarity
+                })
         
-        return source_docs
-    
-    def generate_grounded_answer(self, question: str, source_documents: List[SourceDocument]) -> str:
-        """Generate a grounded answer based on retrieved source documents."""
-        if not source_documents:
-            return "I don't have enough relevant information to answer your question. Please make sure the website content has been indexed."
+        return hits
         
-        # Create context from source documents
-        context_parts = []
-        for i, doc in enumerate(source_documents, 1):
-            context_parts.append(f"Source {i} ({doc.url}):\n{doc.content}")
-        
-        context = "\n\n".join(context_parts)
-        
-        # Generate answer based on context
-        # This is a simple implementation - in production you might use an LLM
-        answer_parts = []
-        
-        # Add introduction
-        answer_parts.append(f"Based on the indexed content, here's what I found regarding your question: '{question}'")
-        
-        # Add relevant information with citations
-        for i, doc in enumerate(source_documents, 1):
-            if len(doc.content) > 200:
-                snippet = doc.content[:200] + "..."
-            else:
-                snippet = doc.content
-            
-            answer_parts.append(f"\nFrom {doc.title} ({doc.url}):")
-            answer_parts.append(f"{snippet}")
-            answer_parts.append(f"(Relevance score: {doc.similarity_score:.2f})")
-        
-        # Add conclusion
-        if len(source_documents) > 1:
-            answer_parts.append(f"\nThis answer is based on {len(source_documents)} relevant sources from the indexed website content.")
-        else:
-            answer_parts.append(f"\nThis answer is based on 1 relevant source from the indexed website content.")
-        
-        return "\n".join(answer_parts)
-    
-    def calculate_confidence(self, source_documents: List[SourceDocument]) -> float:
-        """Calculate confidence score based on source documents."""
-        if not source_documents:
-            return 0.0
-        
-        # Calculate average similarity score
-        avg_similarity = sum(doc.similarity_score for doc in source_documents) / len(source_documents)
-        
-        # Boost confidence if we have multiple high-quality sources
-        confidence = avg_similarity
-        
-        if len(source_documents) >= 3:
-            confidence = min(confidence * 1.1, 1.0)
-        
-        if avg_similarity >= 0.9:
-            confidence = min(confidence * 1.05, 1.0)
-        
-        return round(confidence, 3)
-    
-    def ask_question(self, question: str, max_results: int = 5) -> AskResponse:
-        """Process a question and return a grounded answer with sources."""
-        try:
-            # Retrieve relevant content
-            relevant_content = self.retrieve_relevant_content(question, max_results)
-            
-            # Format source documents
-            source_documents = self.format_source_documents(relevant_content)
-            
-            # Generate grounded answer
-            answer = self.generate_grounded_answer(question, source_documents)
-            
-            # Calculate confidence
-            confidence = self.calculate_confidence(source_documents)
-            
-            return AskResponse(
-                answer=answer,
-                sources=source_documents,
-                confidence=confidence,
-                question=question
-            )
-        
-        except Exception as e:
-            # Return error response with empty sources
-            return AskResponse(
-                answer=f"I encountered an error while processing your question: {str(e)}",
-                sources=[],
-                confidence=0.0,
-                question=question
-            )
-    
-
+    except Exception as e:
+        print(f"Search error: {str(e)}")
+        return []
