@@ -65,14 +65,61 @@ class FirecrawlClient:
                      exclude_patterns: Optional[List[str]] = None) -> List[Dict[str, Any]]:
         """Crawl an entire website and return clean pages."""
         try:
-            # For now, just scrape the single page since crawl_url has parameter issues
-            # This is a simplified version that works with current Firecrawl API
             pages = []
             
-            # Scrape the main page
+            # Try multi-page crawling first
+            if max_pages > 1:
+                try:
+                    # Use Firecrawl's crawl functionality for multiple pages
+                    # Using correct API parameters from 2024 documentation
+                    from firecrawl import ScrapeOptions
+                    
+                    scrape_options = ScrapeOptions(
+                        formats=['markdown'],
+                        only_main_content=True,
+                        exclude_tags=['nav', 'footer', '.sidebar', '#sidebar'],
+                        timeout=15000
+                    )
+                    
+                    crawl_result = self.app.crawl_url(
+                        url=url,
+                        limit=max_pages,
+                        scrape_options=scrape_options,
+                        max_depth=2,
+                        allow_backward_links=False
+                    )
+                    
+                    if hasattr(crawl_result, 'success') and crawl_result.success:
+                        # Process crawled pages
+                        crawled_pages = getattr(crawl_result, 'data', [])
+                        for page_data in crawled_pages:
+                            page = {
+                                'url': getattr(page_data, 'url', url),
+                                'title': getattr(page_data, 'title', '') or '',
+                                'description': getattr(page_data, 'description', '') or '',
+                                'content': getattr(page_data, 'markdown', '') or '',
+                                'html': getattr(page_data, 'html', '') if False else '',
+                                'metadata': {
+                                    'source': 'firecrawl_crawl',
+                                    'scraped_at': time.time(),
+                                    'status_code': getattr(page_data, 'statusCode', None),
+                                    'content_type': 'text/html'
+                                }
+                            }
+                            pages.append(page)
+                    
+                    if pages:
+                        print(f"Successfully crawled {len(pages)} pages using multi-page crawling")
+                        return pages
+                    
+                except Exception as e:
+                    print(f"Multi-page crawling failed: {str(e)}. Falling back to single page crawling.")
+            
+            # Fallback to single page crawling
             main_page = self.crawl_single_page(url)
             if main_page:
                 pages.append(main_page)
+                print(f"Successfully crawled 1 page using single-page crawling")
             
             return pages
         
