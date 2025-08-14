@@ -93,14 +93,24 @@ class FirecrawlClient:
                         # Process crawled pages
                         crawled_pages = getattr(crawl_result, 'data', [])
                         for i, page_data in enumerate(crawled_pages):
-                            # Extract URL - try multiple possible attributes
-                            page_url = getattr(page_data, 'url', None)
+                            # Extract URL from the metadata which contains the actual page URLs
+                            page_url = None
+                            
+                            # First try to get URL from metadata (this is where the real URLs are)
+                            if hasattr(page_data, 'metadata') and page_data.metadata:
+                                page_url = getattr(page_data.metadata, 'url', None) or getattr(page_data.metadata, 'sourceURL', None)
+                            
+                            # Fallback to direct attributes
                             if not page_url:
-                                page_url = getattr(page_data, 'sourceURL', None)
-                            if not page_url and hasattr(page_data, 'metadata'):
-                                page_url = getattr(page_data.metadata, 'sourceURL', None)
+                                page_url = getattr(page_data, 'url', None) or getattr(page_data, 'sourceURL', None)
+                            
+                            # Clean up the URL (remove utm parameters for cleaner display)
+                            if page_url and '?' in page_url:
+                                page_url = page_url.split('?')[0]
+                            
+                            # Use base URL as absolute fallback
                             if not page_url:
-                                page_url = url if i == 0 else f"{url}#{i}"  # Fallback to base URL
+                                page_url = url
                             
                             page = {
                                 'url': page_url,
