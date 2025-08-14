@@ -318,6 +318,7 @@ def chat_endpoint(req: ChatRequest):
                 first_message=first_msg,
                 theme_interest=theme_interest
             )
+            print(f"✅ SAVED LEAD: {st['name']} - {st['phone']} - Thread: {req.thread_id}")
         except Exception as e:
             print(f"Error saving lead: {e}")
     
