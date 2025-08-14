@@ -10,6 +10,7 @@ from app.config import OPENAI_API_KEY
 from crawler.firecrawl_crawl import FirecrawlClient
 from chromadb import PersistentClient
 from app.theme_router import detect_theme_query, find_theme_url
+from utils.theme import mentions_theme, resolve_theme_url
 import requests
 import time
 import os
@@ -41,7 +42,7 @@ except Exception:
     chroma_collection = None
 
 # In-memory session store (replace with Redis/DB in prod)
-CHAT_SESSIONS = {}  # {thread_id: {"summary": str, "turns": [(role, content), ...], "first_turn": bool}}
+CHAT_SESSIONS = {}  # {thread_id: {"summary": str, "turns": [(role, content), ...], "first_turn": bool, "name": str, "phone": str}}
 
 TONE_PROMPT = """You are replying as a Malaysian business owner from {company}. Use "I/we".
 Keep answers short (1–2 sentences), polite, friendly, professional. No exclamation marks,
@@ -188,6 +189,10 @@ def build_context(snippets):
         parts.append(f"[{title}] {doc}")
     return "\n\n".join(parts[:3])
 
+def need_contact(session):
+    """Check if we need contact info (name and phone) from the user."""
+    return not (session.get("name") and session.get("phone"))
+
 @app.post("/ask", response_model=AskResponse)
 def ask(req: AskRequest):
     hits = search(req.question, top_k=req.top_k or 6)
@@ -227,6 +232,22 @@ def chat_endpoint(req: ChatRequest):
             reply = f"Hi there, this is {req.name} here from {req.company}. How may I help you today?"
         else:
             reply = "Hi again—how can I help?"
+        st["turns"].append(("user", req.user_message)); st["turns"].append(("assistant", reply))
+        st["summary"] = summarise(st["summary"], req.user_message, reply)
+        st["first_turn"] = False
+        return ChatResponse(answer=reply, sources=[])
+
+    # Theme detection with contact handling
+    if mentions_theme(req.user_message):
+        url = resolve_theme_url(req.user_message)
+        if url:
+            if need_contact(st):
+                reply = f"Sure—here's one project that fits: {url}. May I have your name and phone number so I can follow up properly?"
+            else:
+                reply = f"Sure—here's one project that fits: {url}"
+        else:
+            reply = "We definitely can do that, let's talk more when we meet. Can you provide me your name and phone number?"
+        
         st["turns"].append(("user", req.user_message)); st["turns"].append(("assistant", reply))
         st["summary"] = summarise(st["summary"], req.user_message, reply)
         st["first_turn"] = False
