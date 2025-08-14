@@ -9,6 +9,7 @@ from app.chunking import TextChunker
 from app.config import OPENAI_API_KEY
 from crawler.firecrawl_crawl import FirecrawlClient
 from chromadb import PersistentClient
+from app.theme_router import detect_theme_query, find_theme_url
 import requests
 import time
 import os
@@ -231,6 +232,11 @@ def chat_endpoint(req: ChatRequest):
         st["first_turn"] = False
         return ChatResponse(answer=reply, sources=[])
 
+    # 1) Detect style/feel intent and find theme URL
+    theme_url = ""
+    if detect_theme_query(req.user_message):
+        theme_url = find_theme_url(req.user_message)
+
     # Query rewrite -> retrieval -> context
     rewritten = rewrite_query(st["summary"], req.user_message)
     hits = retrieve_for_chat(rewritten)
@@ -241,6 +247,7 @@ def chat_endpoint(req: ChatRequest):
     system_prompt = TONE_PROMPT.format(company=req.company)
     messages = [
         {"role":"system","content": system_prompt},
+        {"role":"system","content": f"THEME_URL: {theme_url}"},
         {"role":"system","content": f"Conversation summary:\n{st['summary'][:2000]}"},
         {"role":"system","content": f"Relevant context (snippets):\n{context}"},
     ]

@@ -36,8 +36,10 @@ Preferred communication style: Simple, everyday language.
 - **Health Endpoint**: System status monitoring with database connectivity checks
 - **Crawl Endpoint**: Website crawling with configurable parameters (max pages, subdomain inclusion)
 - **Ask Endpoint**: Question-answering with source citations, confidence scoring, and configurable response tone
+- **Chat Endpoint**: Enhanced conversational AI with Malaysian business tone, session management, and theme detection
 - **Request/Response Models**: Pydantic models for validation and API documentation
 - **Dynamic Tone System**: Configurable response styles (customer_support, technical, casual) loaded from external files
+- **Theme Detection**: Intelligent style/aesthetic query detection with portfolio URL mapping
 
 ### User Interface Architecture
 - **Web Crawler Interface**: Main page for website crawling and content management
@@ -58,10 +60,11 @@ Preferred communication style: Simple, everyday language.
 2. **Processing**: Content is cleaned, chunked, and embedded using OpenAI text-embedding-3-large
 3. **Indexing**: Vectors and metadata stored in ChromaDB with authentic page URLs
 4. **Conversation Management**: Session tracking with thread IDs and conversation memory
-5. **Query Processing**: Intelligent query rewriting based on conversation context
-6. **Retrieval**: Enhanced semantic search with reranking and diversity filtering
-7. **Response Generation**: Malaysian business tone with conversation context and postprocessing
-8. **Memory Update**: Conversation summarization for long-term context retention
+5. **Theme Detection**: Automatic style/aesthetic intent recognition with portfolio URL mapping
+6. **Query Processing**: Intelligent query rewriting based on conversation context
+7. **Retrieval**: Enhanced semantic search with reranking and diversity filtering
+8. **Response Generation**: Malaysian business tone with conversation context, theme URLs, and postprocessing
+9. **Memory Update**: Conversation summarization for long-term context retention
 
 ## External Dependencies
 
