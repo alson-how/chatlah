@@ -59,11 +59,12 @@ class ContentIndexer:
             metadatas = []
             for chunk in chunks:
                 metadata = chunk['metadata'].copy()
-                # Ensure all metadata values are strings
+                # Ensure all metadata values are strings and remove None values
+                clean_metadata = {}
                 for key, value in metadata.items():
                     if value is not None:
-                        metadata[key] = str(value)
-                metadatas.append(metadata)
+                        clean_metadata[key] = str(value)
+                metadatas.append(clean_metadata)
             
             # Add to Chroma collection
             self.collection.add(
@@ -143,10 +144,15 @@ class ContentIndexer:
             similar_content = []
             if results['documents'] and results['documents'][0]:
                 for i in range(len(results['documents'][0])):
+                    distance = results['distances'][0][i]
+                    # ChromaDB uses cosine distance, convert to similarity score
+                    # For cosine distance, similarity = 1 - distance
+                    similarity = max(0, 1 - distance)
+                    
                     similar_content.append({
                         'content': results['documents'][0][i],
                         'metadata': results['metadatas'][0][i],
-                        'similarity_score': max(0, 1 - results['distances'][0][i])  # Convert distance to similarity
+                        'similarity_score': similarity
                     })
             
             return similar_content

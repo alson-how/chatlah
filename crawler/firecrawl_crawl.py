@@ -30,29 +30,28 @@ class FirecrawlClient:
             if not scraped_data.success:
                 raise Exception(f"Failed to scrape URL: {getattr(scraped_data, 'error', 'Unknown error')}")
             
-            # Extract content from the data attribute
-            content_data = scraped_data.data
-            
+            # Extract content directly from scraped_data attributes
             page_data = {
                 'url': url,
-                'title': getattr(content_data.metadata, 'title', '') if hasattr(content_data, 'metadata') else '',
-                'description': getattr(content_data.metadata, 'description', '') if hasattr(content_data, 'metadata') else '',
-                'content': getattr(content_data, 'markdown', ''),
-                'html': getattr(content_data, 'html', '') if include_html else '',
+                'title': getattr(scraped_data, 'title', '') or '',
+                'description': getattr(scraped_data, 'description', '') or '',
+                'content': getattr(scraped_data, 'markdown', '') or '',
+                'html': getattr(scraped_data, 'html', '') if include_html else '',
                 'metadata': {
                     'source': 'firecrawl',
                     'scraped_at': time.time(),
-                    'status_code': getattr(content_data.metadata, 'statusCode', None) if hasattr(content_data, 'metadata') else None,
-                    'content_type': getattr(content_data.metadata, 'contentType', 'text/html') if hasattr(content_data, 'metadata') else 'text/html'
+                    'status_code': getattr(scraped_data, 'statusCode', None),
+                    'content_type': 'text/html'
                 }
             }
             
-            # Add any additional metadata if available
-            if hasattr(content_data, 'metadata'):
-                metadata_dict = vars(content_data.metadata) if hasattr(content_data.metadata, '__dict__') else {}
-                for key, value in metadata_dict.items():
-                    if key not in ['title', 'description', 'statusCode', 'contentType']:
-                        page_data['metadata'][key] = value
+            # Try to get metadata if available
+            if hasattr(scraped_data, 'metadata'):
+                metadata_obj = scraped_data.metadata
+                if hasattr(metadata_obj, 'title'):
+                    page_data['title'] = metadata_obj.title or ''
+                if hasattr(metadata_obj, 'description'):
+                    page_data['description'] = metadata_obj.description or ''
             
             return page_data
         

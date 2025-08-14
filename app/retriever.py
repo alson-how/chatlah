@@ -21,12 +21,13 @@ class ContentRetriever:
                 n_results=max_results
             )
             
-            # Filter by similarity threshold
+            # Filter results with a reasonable threshold
+            # Even low similarity scores can contain relevant information
+            min_threshold = 0.01  # Very permissive to capture relevant content
             filtered_content = [
                 content for content in similar_content
-                if content['similarity_score'] >= settings.similarity_threshold
+                if content['similarity_score'] > min_threshold
             ]
-            
             return filtered_content
         
         except Exception as e:
