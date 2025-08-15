@@ -336,12 +336,26 @@ def chat_endpoint(req: ChatRequest):
         st["first_turn"] = False
         return ChatResponse(answer=reply, sources=[])
 
-    # Greeting short-circuit (no retrieval)
+    # Greeting handling with tone system
     if is_greeting(req.user_message):
-        if first_turn:
+
+        system_prompt = load_system_prompt("customer_support")
+        
+        # Create simple greeting context
+        greeting_msg = [{
+            "role": "system", 
+            "content": system_prompt
+        }, {
+            "role": "user", 
+            "content": f"Customer says: {req.user_message}. This is a {'first' if first_turn else 'repeated'} greeting."
+        }]
+        
+        try:
+            reply = call_chat(greeting_msg, temperature=0.3, max_tokens=80)
+            reply = postprocess(reply, first_turn=first_turn)
+        except Exception:
             reply = f"Hi there, this is {req.name} here from {req.company}. How may I help you today?"
-        else:
-            reply = "Hi again—how can I help?"
+        
         st["turns"].append(("user", req.user_message))
         st["turns"].append(("assistant", reply))
         st["summary"] = summarise(st["summary"], req.user_message, reply)
