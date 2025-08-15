@@ -5,13 +5,14 @@ def extract_name(text: str) -> str:
     """Extract name from user message."""
     text = text.lower().strip()
     
-    # Pattern: "my name is [name]" or "i'm [name]" or "i am [name]"
+    # Pattern: "my name is [name]" or "i'm [name]" or "i am [name]" or "[name] here"
     patterns = [
         r"my name is ([a-zA-Z]+(?:\s+[a-zA-Z]+)?)",  # Stop at first 1-2 words
         r"i'?m ([a-zA-Z]+(?:\s+[a-zA-Z]+)?)",
         r"i am ([a-zA-Z]+(?:\s+[a-zA-Z]+)?)",
         r"name is ([a-zA-Z]+(?:\s+[a-zA-Z]+)?)",
-        r"call me ([a-zA-Z]+(?:\s+[a-zA-Z]+)?)"
+        r"call me ([a-zA-Z]+(?:\s+[a-zA-Z]+)?)",
+        r"^([a-zA-Z]+(?:\s+[a-zA-Z]+)?) here"  # "[Name] here" format
     ]
     
     for pattern in patterns:

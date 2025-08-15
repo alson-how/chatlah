@@ -300,6 +300,7 @@ def chat_endpoint(req: ChatRequest):
     name = extract_name(user_text)
     phone = extract_phone(user_text)
 
+
     if name:
         st["name"] = name
 
@@ -332,7 +333,10 @@ def chat_endpoint(req: ChatRequest):
             print(f"Error saving lead: {e}")
 
     # Lead-only short-circuit (runs BEFORE greeting + LLM)
-    if is_lead_only(user_text) or (name and phone and not need_contact(st)):
+    is_lead = is_lead_only(user_text)
+    has_both_contact = (name and phone and not need_contact(st))
+
+    if is_lead or has_both_contact:
 
         final_name = st.get("name", "there")
         reply = f"Thank you {final_name}, I'll be contacting you soon."
