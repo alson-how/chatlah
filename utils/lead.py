@@ -19,7 +19,7 @@ def extract_name(text: str) -> str:
         if match:
             name = match.group(1).strip().title()
             # Filter out common words that aren't names
-            if name.lower() not in ['interested', 'looking', 'here', 'ready', 'good', 'fine', 'okay', 'and', 'my', 'phone', 'is']:
+            if name.lower() not in ['interested', 'looking', 'here', 'ready', 'good', 'fine', 'okay', 'and', 'my', 'phone', 'is', 'looking for', 'interested in', 'planning to', 'hoping to', 'wanting to', 'trying to']:
                 # Stop at common connector words
                 words = name.split()
                 clean_words = []

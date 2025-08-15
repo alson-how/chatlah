@@ -296,6 +296,7 @@ def chat_endpoint(req: ChatRequest):
     # Extract and store contact information from every message
     name = extract_name(user_text)
     phone = extract_phone(user_text)
+
     if name:
         st["name"] = name
     if phone:
