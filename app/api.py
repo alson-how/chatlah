@@ -12,12 +12,14 @@ from chromadb import PersistentClient
 from utils.theme import mentions_theme, resolve_theme_url
 from utils.lead import extract_name, extract_phone, is_lead_only
 from app.database import save_lead, get_lead, get_all_leads
+from .mcp_tools import router as mcp_router
 import requests
 import time
 import os
 import re
 
 app = FastAPI(title="RAG Site API", version="1.0.0")
+app.include_router(mcp_router)
 
 # Add CORS middleware
 app.add_middleware(
@@ -294,7 +296,7 @@ def chat_endpoint(req: ChatRequest):
     # Extract and store contact information from every message
     name = extract_name(user_text)
     phone = extract_phone(user_text)
-    if name:
+    3if name:
         st["name"] = name
     if phone:
         st["phone"] = phone
