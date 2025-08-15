@@ -370,6 +370,7 @@ def chat_endpoint(req: ChatRequest):
 
         url = resolve_theme_url(req.user_message)
         if url:
+            print(f"Need contact: {need_contact(st)}")
             if need_contact(st):
                 reply = f"Sure, here's the project we did before {url}. May I have your name and phone number so I can follow up properly?"
             else:
