@@ -245,7 +245,10 @@ def build_context(snippets):
 
 def need_contact(session):
     """Check if we need contact info (name and phone) from the user."""
-    return not (session.get("name") and session.get("phone"))
+    has_name = session.get("name")
+    has_phone = session.get("phone") 
+
+    return not (has_name and has_phone)
 
 
 @app.post("/ask", response_model=AskResponse)
@@ -299,8 +302,10 @@ def chat_endpoint(req: ChatRequest):
 
     if name:
         st["name"] = name
+
     if phone:
         st["phone"] = phone
+
 
     # Save to database when we have both name and phone
     if st.get("name") and st.get("phone"):
@@ -367,10 +372,9 @@ def chat_endpoint(req: ChatRequest):
 
     # Theme detection with contact handling
     if mentions_theme(req.user_message):
-
         url = resolve_theme_url(req.user_message)
         if url:
-            print(f"Need contact: {need_contact(st)}")
+
             if need_contact(st):
                 reply = f"Sure, here's the project we did before {url}. May I have your name and phone number so I can follow up properly?"
             else:
