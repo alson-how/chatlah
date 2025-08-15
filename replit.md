@@ -47,7 +47,7 @@ Preferred communication style: Simple, everyday language.
 - **Conversation Management**: Thread-based sessions with clear conversation history
 - **Responsive Design**: Mobile-friendly interfaces with modern UI components
 - **Cross-Navigation**: Seamless navigation between crawler and chat interfaces
-- **Advanced Features**: Conversation memory, greeting detection, query rewriting, portfolio integration, automatic lead extraction, and intelligent contact information collection with business acknowledgment
+- **Advanced Features**: Dynamic multi-step conversation flow, complete lead profile collection (name, contact, location, style), conversation memory, greeting detection, query rewriting, portfolio integration, and intelligent progressive information gathering
 
 ### Configuration Management
 - **Environment-Based**: Centralized settings with .env file support
@@ -59,13 +59,13 @@ Preferred communication style: Simple, everyday language.
 1. **Crawling**: Firecrawl API extracts website content with proper URL extraction from metadata
 2. **Processing**: Content is cleaned, chunked, and embedded using OpenAI text-embedding-3-large
 3. **Indexing**: Vectors and metadata stored in ChromaDB with authentic page URLs
-4. **Conversation Management**: Session tracking with thread IDs and conversation memory
-5. **Lead Extraction**: Automatic name and phone number extraction from every user message with intelligent contact validation
-6. **Lead Processing**: Contact-only message detection with immediate acknowledgment and lead capture confirmation
-7. **Theme Detection with Contact**: Automatic style/aesthetic intent recognition with portfolio URL mapping and contact information collection
-8. **Query Processing**: Intelligent query rewriting based on conversation context
-9. **Retrieval**: Enhanced semantic search with reranking and diversity filtering
-10. **Response Generation**: Malaysian business tone with conversation context, theme URLs, and postprocessing
+4. **Conversation Management**: Session tracking with thread IDs and dynamic conversation state
+5. **Progressive Lead Collection**: Multi-step information gathering for name, phone, location, and style preferences
+6. **Information Extraction**: Pattern-based extraction from every user message with validation
+7. **Conversation Flow Control**: Dynamic routing based on missing information requirements
+8. **Completion Detection**: Only ends conversation when all required data (name, phone, location, style) is collected
+9. **Database Storage**: Complete lead profiles with location and style preference tracking
+10. **Response Generation**: Malaysian business tone with progressive question flow and completion confirmation
 11. **Memory Update**: Conversation summarization for long-term context retention
 
 ## External Dependencies

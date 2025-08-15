@@ -11,6 +11,7 @@ from crawler.firecrawl_crawl import FirecrawlClient
 from chromadb import PersistentClient
 from utils.theme import mentions_theme, resolve_theme_url
 from utils.lead import extract_name, extract_phone, is_lead_only
+from utils.location import extract_location, mentions_location_need
 from app.database import save_lead, get_lead, get_all_leads
 from .mcp_tools import router as mcp_router
 import requests
@@ -247,8 +248,27 @@ def need_contact(session):
     """Check if we need contact info (name and phone) from the user."""
     has_name = session.get("name")
     has_phone = session.get("phone") 
-
     return not (has_name and has_phone)
+
+def get_missing_info(session):
+    """Get list of missing information needed from user."""
+    missing = []
+    
+    if not session.get("name"):
+        missing.append("name")
+    if not session.get("phone"):
+        missing.append("phone number")
+    if not session.get("location"):
+        missing.append("location")
+    if not session.get("style_preference"):
+        missing.append("style preference")
+    
+    return missing
+
+def is_conversation_complete(session):
+    """Check if we have all required information to complete the conversation."""
+    required = ["name", "phone", "location", "style_preference"]
+    return all(session.get(field) for field in required)
 
 
 @app.post("/ask", response_model=AskResponse)
@@ -296,16 +316,23 @@ def chat_endpoint(req: ChatRequest):
     first_turn = st["first_turn"]
     user_text = req.user_message
 
-    # Extract and store contact information from every message
+    # Extract and store all information from every message
     name = extract_name(user_text)
     phone = extract_phone(user_text)
-
-
+    location = extract_location(user_text)
+    
+    # Store extracted information
     if name:
         st["name"] = name
-
     if phone:
         st["phone"] = phone
+    if location:
+        st["location"] = location
+    
+    # Check for style preference - store any style-related response
+    style_keywords = ["modern", "minimalist", "classic", "vintage", "industrial", "scandinavian", "contemporary", "traditional", "rustic", "style", "vibe", "theme", "design", "look"]
+    if not st.get("style_preference") and any(keyword in user_text.lower() for keyword in style_keywords):
+        st["style_preference"] = user_text
 
 
     # Save to database when we have both name and phone
@@ -325,28 +352,51 @@ def chat_endpoint(req: ChatRequest):
                       phone=st["phone"],
                       thread_id=req.thread_id,
                       first_message=first_msg,
-                      theme_interest=theme_interest)
+                      theme_interest=theme_interest,
+                      location=st.get("location", ""),
+                      style_preference=st.get("style_preference", ""))
             print(
                 f"✅ SAVED LEAD: {st['name']} - {st['phone']} - Thread: {req.thread_id}"
             )
         except Exception as e:
             print(f"Error saving lead: {e}")
 
-    # Lead-only short-circuit (runs BEFORE greeting + LLM)
-    is_lead = is_lead_only(user_text)
-    has_both_contact = (name and phone and not need_contact(st))
-
-    if is_lead or has_both_contact:
-
+    # Dynamic conversation flow - only end when we have ALL required info
+    if is_conversation_complete(st):
         final_name = st.get("name", "there")
-        reply = f"Thank you {final_name}, I'll be contacting you soon."
-        # Mark that we've captured lead so we don't ask again
-        st["lead_captured"] = True
+        reply = f"Perfect! Thank you {final_name}. I have all the details I need - your contact info, location ({st.get('location')}), and style preference. I'll prepare a proposal and contact you soon at {st.get('phone')}."
+        st["conversation_complete"] = True
         st["turns"].append(("user", req.user_message))
         st["turns"].append(("assistant", reply))
         st["summary"] = summarise(st["summary"], req.user_message, reply)
         st["first_turn"] = False
         return ChatResponse(answer=reply, sources=[])
+    
+    # Progressive information collection - ask for next missing piece
+    missing_info = get_missing_info(st)
+    if missing_info and (is_lead_only(user_text) or (name and phone) or st.get("name") or st.get("phone")):
+        next_question = ""
+        if "location" in missing_info:
+            next_question = "Great! What's the location of your property? (e.g., Bangsar, Mont Kiara, PJ)"
+        elif "style preference" in missing_info:
+            next_question = "What kind of style or vibe do you want for your space?"
+        elif "name" in missing_info:
+            next_question = "May I have your name?"
+        elif "phone number" in missing_info:
+            next_question = "May I have your phone number so I can follow up?"
+            
+        if next_question:
+            user_name = st.get("name", "")
+            if user_name:
+                reply = f"Thank you {user_name}! {next_question}"
+            else:
+                reply = next_question
+                
+            st["turns"].append(("user", req.user_message))
+            st["turns"].append(("assistant", reply))
+            st["summary"] = summarise(st["summary"], req.user_message, reply)
+            st["first_turn"] = False
+            return ChatResponse(answer=reply, sources=[])
 
     # Greeting handling with tone system
     if is_greeting(req.user_message):

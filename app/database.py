@@ -21,15 +21,15 @@ def get_db_connection():
         if conn:
             conn.close()
 
-def save_lead(name: str, phone: str, thread_id: str, first_message: str = "", theme_interest: str = ""):
+def save_lead(name: str, phone: str, thread_id: str, first_message: str = "", theme_interest: str = "", location: str = "", style_preference: str = ""):
     """Save or update lead information in the database."""
     with get_db_connection() as conn:
         cursor = conn.cursor()
         
         # Insert or update lead information
         cursor.execute("""
-            INSERT INTO leads (name, phone, thread_id, first_message, theme_interest, created_at, updated_at)
-            VALUES (%s, %s, %s, %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            INSERT INTO leads (name, phone, thread_id, first_message, theme_interest, location, style_preference, created_at, updated_at)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
             ON CONFLICT (thread_id) 
             DO UPDATE SET 
                 name = EXCLUDED.name,
@@ -42,8 +42,16 @@ def save_lead(name: str, phone: str, thread_id: str, first_message: str = "", th
                     WHEN EXCLUDED.theme_interest != '' THEN EXCLUDED.theme_interest 
                     ELSE leads.theme_interest 
                 END,
+                location = CASE 
+                    WHEN EXCLUDED.location != '' THEN EXCLUDED.location 
+                    ELSE leads.location 
+                END,
+                style_preference = CASE 
+                    WHEN EXCLUDED.style_preference != '' THEN EXCLUDED.style_preference 
+                    ELSE leads.style_preference 
+                END,
                 updated_at = CURRENT_TIMESTAMP
-        """, (name, phone, thread_id, first_message, theme_interest))
+        """, (name, phone, thread_id, first_message, theme_interest, location, style_preference))
         
         conn.commit()
         return cursor.rowcount
