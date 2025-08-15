@@ -48,10 +48,7 @@ except Exception:
 CHAT_SESSIONS = {
 }  # {thread_id: {"summary": str, "turns": [(role, content), ...], "first_turn": bool, "name": str, "phone": str}}
 
-TONE_PROMPT = """You are replying as a Malaysian business owner from {company}. Use "I/we".
-Keep answers short (1–2 sentences), polite, friendly, professional. No exclamation marks,
-no bold/bullets, no AI phrases. Only greet on first user greeting.
-"""
+# TONE_PROMPT removed - now using load_system_prompt() to load from /tone folder
 
 
 @app.get("/")
@@ -377,7 +374,7 @@ def chat_endpoint(req: ChatRequest):
     context = build_context(top)
 
     # Build messages
-    system_prompt = TONE_PROMPT.format(company=req.company)
+    system_prompt = load_system_prompt("customer_support")
     messages = [
         {
             "role": "system",
