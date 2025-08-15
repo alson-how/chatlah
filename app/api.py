@@ -284,6 +284,7 @@ def ask(req: AskRequest):
 @app.post("/chat", response_model=ChatResponse)
 def chat_endpoint(req: ChatRequest):
     """Enhanced chat endpoint with conversation memory and Malaysian business tone."""
+    
     st = CHAT_SESSIONS.setdefault(req.thread_id, {
         "summary": "",
         "turns": [],
@@ -326,6 +327,7 @@ def chat_endpoint(req: ChatRequest):
 
     # Lead-only short-circuit (runs BEFORE greeting + LLM)
     if is_lead_only(user_text) or (name and phone and not need_contact(st)):
+
         final_name = st.get("name", "there")
         reply = f"Thank you {final_name}, I'll be contacting you soon."
         # Mark that we've captured lead so we don't ask again
@@ -364,6 +366,7 @@ def chat_endpoint(req: ChatRequest):
 
     # Theme detection with contact handling
     if mentions_theme(req.user_message):
+
         url = resolve_theme_url(req.user_message)
         if url:
             if need_contact(st):
@@ -392,7 +395,6 @@ def chat_endpoint(req: ChatRequest):
 
     # Build messages
     system_prompt = load_system_prompt("customer_support")
-    print(f"SYSTEM PROMPT: {system_prompt}")
     messages = [
         {
             "role": "system",
