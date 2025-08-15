@@ -392,6 +392,7 @@ def chat_endpoint(req: ChatRequest):
 
     # Build messages
     system_prompt = load_system_prompt("customer_support")
+    print(f"SYSTEM PROMPT: {system_prompt}")
     messages = [
         {
             "role": "system",
