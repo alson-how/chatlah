@@ -62,6 +62,7 @@ async def chat():
     """Serve the chat interface."""
     return FileResponse("static/chat.html")
 
+
 @app.get("/leads-dashboard")
 async def leads_dashboard():
     """Serve the leads dashboard interface."""
@@ -71,6 +72,7 @@ async def leads_dashboard():
 @app.get("/health")
 def health():
     return {"ok": True}
+
 
 @app.get("/leads")
 def leads_endpoint():
@@ -289,7 +291,7 @@ def chat_endpoint(req: ChatRequest):
     })
     first_turn = st["first_turn"]
     user_text = req.user_message
-    
+
     # Extract and store contact information from every message
     name = extract_name(user_text)
     phone = extract_phone(user_text)
@@ -297,30 +299,31 @@ def chat_endpoint(req: ChatRequest):
         st["name"] = name
     if phone:
         st["phone"] = phone
-    
+
     # Save to database when we have both name and phone
     if st.get("name") and st.get("phone"):
         try:
             # Get the first message from conversation history
-            first_msg = st.get("turns")[0][1] if st.get("turns") and len(st.get("turns")) > 0 else user_text
+            first_msg = st.get("turns")[0][1] if st.get("turns") and len(
+                st.get("turns")) > 0 else user_text
             # Determine theme interest from conversation
             theme_interest = ""
             for turn in st.get("turns", []):
                 if mentions_theme(turn[1]) and turn[0] == "user":
                     theme_interest = turn[1]
                     break
-            
-            save_lead(
-                name=st["name"], 
-                phone=st["phone"], 
-                thread_id=req.thread_id,
-                first_message=first_msg,
-                theme_interest=theme_interest
+
+            save_lead(name=st["name"],
+                      phone=st["phone"],
+                      thread_id=req.thread_id,
+                      first_message=first_msg,
+                      theme_interest=theme_interest)
+            print(
+                f"✅ SAVED LEAD: {st['name']} - {st['phone']} - Thread: {req.thread_id}"
             )
-            print(f"✅ SAVED LEAD: {st['name']} - {st['phone']} - Thread: {req.thread_id}")
         except Exception as e:
             print(f"Error saving lead: {e}")
-    
+
     # Lead-only short-circuit (runs BEFORE greeting + LLM)
     if is_lead_only(user_text) or (name and phone and not need_contact(st)):
         final_name = st.get("name", "there")
