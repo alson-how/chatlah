@@ -41,9 +41,45 @@ def extract_location(text: str) -> str:
                 location_lower = location.lower()
                 
                 # Filter out style-related words that are not locations
-                style_keywords = ["modern", "contemporary", "minimalist", "classic", "vintage", "industrial", 
-                                "scandinavian", "traditional", "rustic", "retro", "style", "design", "vibe", 
-                                "theme", "look", "feel", "aesthetic", "decor", "interior"]
+                style_keywords = [
+                    # Core design movements
+                    "modern", "contemporary", "minimalist", "maximalist",
+                    "classic", "traditional", "transitional", "colonial",
+                    "industrial", "scandinavian", "mid century", "mid-century",
+                    "art deco", "art nouveau", "bauhaus", "brutalist",
+
+                    # Warm/natural/luxury aesthetics
+                    "natural", "organic", "warm", "neutral", "earthy",
+                    "bohemian", "boho", "eclectic", "rustic", "farmhouse",
+                    "country", "tropical", "resort style", "balinese",
+                    "mediterranean", "greek", "italian", "japanese zen", "zen",
+                    "wabi sabi", "hygge", "coastal", "nautical",
+
+                    # Sleek/elegant aesthetics
+                    "elegant", "luxury", "opulent", "grand", "sophisticated",
+                    "glam", "glamorous", "hollywood regency",
+                    "contemporary luxury", "modern luxury", "serene elegance",
+
+                    # Raw/urban/edgy
+                    "raw", "unfinished", "grunge", "urban", "warehouse",
+                    "loft style", "modern industrial", "exposed brick",
+                    "cement screed", "concrete finish",
+
+                    # Retro/vintage/nostalgic
+                    "retro", "vintage", "shabby chic", "victorian",
+                    "edwardian", "rococo", "baroque", "antique",
+
+                    # Functional / thematic
+                    "functional", "compact", "space saving", "open concept",
+                    "gallery like", "instagrammable", "playful", "vibrant",
+                    "monochrome", "pastel", "colourful", "bold",
+                    "statement", "accent", "feature wall",
+
+                    # Generic words clients often use
+                    "style", "design", "vibe", "theme", "look",
+                    "feel", "aesthetic", "decor", "interior", "ambience",
+                    "atmosphere", "mood", "concept", "inspiration", "trend"
+                ]
                 
                 # Don't extract if it's clearly a style description
                 if any(style_word in location_lower for style_word in style_keywords):
