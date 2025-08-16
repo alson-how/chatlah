@@ -39,6 +39,16 @@ def extract_location(text: str) -> str:
             if location and len(location) > 2:
                 # Check if it contains Malaysian location indicators or just accept reasonable length locations
                 location_lower = location.lower()
+                
+                # Filter out style-related words that are not locations
+                style_keywords = ["modern", "contemporary", "minimalist", "classic", "vintage", "industrial", 
+                                "scandinavian", "traditional", "rustic", "retro", "style", "design", "vibe", 
+                                "theme", "look", "feel", "aesthetic", "decor", "interior"]
+                
+                # Don't extract if it's clearly a style description
+                if any(style_word in location_lower for style_word in style_keywords):
+                    return ""
+                
                 if (any(indicator in location_lower for indicator in malaysian_indicators) or 
                     len(location.split()) <= 3):  # Accept short location names
                     return location.title()
