@@ -1,9 +1,45 @@
 # utils/lead.py
 import re
+import spacy
+
+# Load spaCy model for named entity recognition
+try:
+    nlp = spacy.load("en_core_web_sm")
+except OSError:
+    print("Warning: spaCy English model not found. Please run: python -m spacy download en_core_web_sm")
+    nlp = None
+
+def extract_name_with_spacy(text: str) -> str:
+    """Extract name using spaCy NER."""
+    if not nlp:
+        return ""
+    
+    # Process text with spaCy
+    doc = nlp(text)
+    
+    # Look for PERSON entities
+    for ent in doc.ents:
+        if ent.label_ == "PERSON":
+            name = ent.text.strip()
+            # Filter out common non-name words that might be tagged as PERSON
+            if (name.lower() not in ['here', 'there', 'sir', 'madam', 'mr', 'mrs', 'ms', 'dr'] and
+                len(name) > 1 and
+                not any(char.isdigit() for char in name)):  # No numbers in names
+                return name.title()
+    
+    return ""
 
 def extract_name(text: str) -> str:
-    """Extract name from user message."""
-    text = text.lower().strip()
+    """Extract name from user message using both spaCy NER and regex patterns."""
+    
+    # First try spaCy for more accurate name detection
+    if nlp:
+        spacy_name = extract_name_with_spacy(text)
+        if spacy_name:
+            return spacy_name
+    
+    # Fallback to regex patterns for specific formats
+    text_lower = text.lower().strip()
     
     # Pattern: "my name is [name]" or "i'm [name]" or "i am [name]" or "[name] here"
     patterns = [
@@ -16,7 +52,7 @@ def extract_name(text: str) -> str:
     ]
     
     for pattern in patterns:
-        match = re.search(pattern, text)
+        match = re.search(pattern, text_lower)
         if match:
             name = match.group(1).strip().title()
             # Filter out common words that aren't names

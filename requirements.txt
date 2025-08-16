@@ -19,3 +19,4 @@ uvicorn[standard]==0.30.0
 firecrawl-py
 openai
 psycopg2-binary
+spacy==3.8.7
