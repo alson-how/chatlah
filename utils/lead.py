@@ -21,16 +21,25 @@ def extract_name_with_spacy(text: str) -> str:
     for ent in doc.ents:
         if ent.label_ == "PERSON":
             name = ent.text.strip()
-            # Filter out common non-name words that might be tagged as PERSON
-            if (name.lower() not in ['here', 'there', 'sir', 'madam', 'mr', 'mrs', 'ms', 'dr'] and
+            # Filter out common non-name words and location-related phrases
+            name_lower = name.lower()
+            if (name_lower not in ['here', 'there', 'sir', 'madam', 'mr', 'mrs', 'ms', 'dr', 'in', 'at', 'from'] and
                 len(name) > 1 and
-                not any(char.isdigit() for char in name)):  # No numbers in names
+                not any(char.isdigit() for char in name) and  # No numbers in names
+                not any(loc_word in name_lower for loc_word in ['in ', 'at ', 'from ', 'located']) and  # No location words
+                not name_lower.startswith(('in ', 'at ', 'from '))):  # Not starting with location prepositions
                 return name.title()
     
     return ""
 
 def extract_name(text: str) -> str:
     """Extract name from user message using both spaCy NER and regex patterns."""
+    
+    # Skip if text contains location indicators - don't extract names from location responses
+    location_indicators = ['in ', 'at ', 'from ', 'located', 'my house', 'my condo', 'my apartment', 'my office']
+    text_lower = text.lower().strip()
+    if any(indicator in text_lower for indicator in location_indicators):
+        return ""
     
     # First try spaCy for more accurate name detection
     if nlp:
@@ -39,13 +48,10 @@ def extract_name(text: str) -> str:
             return spacy_name
     
     # Fallback to regex patterns for specific formats
-    text_lower = text.lower().strip()
-    
     # Pattern: "my name is [name]" or "i'm [name]" or "i am [name]" or "[name] here"
     patterns = [
         r"my name is ([a-zA-Z]+(?:\s+[a-zA-Z]+)?)",  # Stop at first 1-2 words
         r"i'?m ([a-zA-Z]+(?:\s+[a-zA-Z]+)?)",
-        r"i am ([a-zA-Z]+(?:\s+[a-zA-Z]+)?)",
         r"name is ([a-zA-Z]+(?:\s+[a-zA-Z]+)?)",
         r"call me ([a-zA-Z]+(?:\s+[a-zA-Z]+)?)",
         r"^([a-zA-Z]+(?:\s+[a-zA-Z]+)?) here"  # "[Name] here" format

@@ -321,17 +321,24 @@ def chat_endpoint(req: ChatRequest):
     phone = extract_phone(user_text)
     location = extract_location(user_text)
     
-    # Store extracted information
-    if name:
+    # Store extracted information - only if we don't already have it
+    if name and not st.get("name"):
         st["name"] = name
-    if phone:
+    if phone and not st.get("phone"):
         st["phone"] = phone
-    if location:
+    if location and not st.get("location"):
         st["location"] = location
     
-    # Check for style preference - store any style-related response
-    style_keywords = ["modern", "minimalist", "classic", "vintage", "industrial", "scandinavian", "contemporary", "traditional", "rustic", "style", "vibe", "theme", "design", "look"]
-    if not st.get("style_preference") and any(keyword in user_text.lower() for keyword in style_keywords):
+    # Check for style preference - only capture specific style responses
+    style_keywords = ["modern", "minimalist", "classic", "vintage", "industrial", "scandinavian", "contemporary", "traditional", "rustic", "bohemian", "art deco", "zen", "luxury", "elegant"]
+    location_keywords = ["located", "house", "condo", "apartment", "office", "in ", "at ", "from "]
+    general_keywords = ["looking for", "need", "want", "help", "design", "interior", "renovation"]
+    
+    # Only capture style if it mentions specific style keywords but NOT location or general request keywords
+    if (not st.get("style_preference") and 
+        any(keyword in user_text.lower() for keyword in style_keywords) and
+        not any(loc_keyword in user_text.lower() for loc_keyword in location_keywords) and
+        not any(gen_keyword in user_text.lower() for gen_keyword in general_keywords)):
         st["style_preference"] = user_text
 
 

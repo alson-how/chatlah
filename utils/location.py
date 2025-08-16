@@ -13,7 +13,7 @@ def extract_location(text: str) -> str:
         r"(?:at|in)\s+([a-zA-Z\s,]+(?:heights|residences|suites|tower|gardens|park|mall|plaza|alam))",
         r"location is\s+([a-zA-Z\s,]+)",
         r"address is\s+([a-zA-Z\s,]+)",
-        r"^(?:hmm\.{2,3}|well\.{2,3}|erm\.{2,3}|um\.{2,3})?([a-zA-Z\s,]+?)(?:\s+oh|lah|ah)?$"  # Malaysian casual responses
+        # Remove this overly broad pattern that captures names
     ]
     
     # Common Malaysian location keywords to help validate
@@ -85,8 +85,13 @@ def extract_location(text: str) -> str:
                 if any(style_word in location_lower for style_word in style_keywords):
                     return ""
                 
-                if (any(indicator in location_lower for indicator in malaysian_indicators) or 
-                    len(location.split()) <= 3):  # Accept short location names
+                # Don't extract if it contains person names or typical name patterns
+                name_patterns = ["here", "speaking", "this is", "my name", "i am", "i'm", "call me"]
+                if any(pattern in location_lower for pattern in name_patterns):
+                    return ""
+                
+                # Only accept if it contains Malaysian location indicators - be more strict
+                if any(indicator in location_lower for indicator in malaysian_indicators):
                     return location.title()
     
     return ""
