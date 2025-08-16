@@ -20,3 +20,4 @@ firecrawl-py
 openai
 psycopg2-binary
 spacy==3.8.7
+rapidfuzz

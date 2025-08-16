@@ -61,12 +61,13 @@ Preferred communication style: Simple, everyday language.
 3. **Indexing**: Vectors and metadata stored in ChromaDB with authentic page URLs
 4. **Conversation Management**: Session tracking with thread IDs and dynamic conversation state
 5. **Progressive Lead Collection**: Multi-step information gathering for name, phone, location, and style preferences
-6. **Information Extraction**: Pattern-based extraction from every user message with validation
-7. **Conversation Flow Control**: Dynamic routing based on missing information requirements
-8. **Completion Detection**: Only ends conversation when all required data (name, phone, location, style) is collected
-9. **Database Storage**: Complete lead profiles with location and style preference tracking
-10. **Response Generation**: Malaysian business tone with progressive question flow and completion confirmation
-11. **Memory Update**: Conversation summarization for long-term context retention
+6. **Advanced Information Extraction**: Malaysian location parser with fuzzy matching, building detection, and comprehensive location aliases (KL, PJ, Mont Kiara, etc.)
+7. **Smart Style Detection**: Advanced style parsing with canonical themes, portfolio links, and typo tolerance using RapidFuzz
+8. **Conversation Flow Control**: Dynamic routing based on missing information requirements
+9. **Completion Detection**: Only ends conversation when all required data (name, phone, location, style) is collected
+10. **Database Storage**: Complete lead profiles with location and style preference tracking
+11. **Response Generation**: Malaysian business tone with progressive question flow and completion confirmation
+12. **Memory Update**: Conversation summarization for long-term context retention
 
 ## External Dependencies
 

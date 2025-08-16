@@ -1,11 +1,19 @@
 # utils/location.py
 import re
+from .parser_my_style_location import extract_location as advanced_extract_location
 
 def extract_location(text: str) -> str:
-    """Extract location information from user message."""
-    text = text.lower().strip()
+    """Extract location information using advanced Malaysian location parser."""
     
-    # Malaysian location patterns - more flexible approach
+    # Use the advanced parser first
+    advanced_result = advanced_extract_location(text)
+    if advanced_result:
+        return advanced_result
+    
+    # Fallback to simple patterns for edge cases
+    text_lower = text.lower().strip()
+    
+    # Simple Malaysian location patterns as backup
     patterns = [
         r"(?:in|at|from|located at)\s+([a-zA-Z\s,]+)",
         r"my (?:house|home|office|shop|place) (?:is )?(?:in|at)\s+([a-zA-Z\s,]+)",
@@ -13,7 +21,6 @@ def extract_location(text: str) -> str:
         r"(?:at|in)\s+([a-zA-Z\s,]+(?:heights|residences|suites|tower|gardens|park|mall|plaza|alam))",
         r"location is\s+([a-zA-Z\s,]+)",
         r"address is\s+([a-zA-Z\s,]+)",
-        # Remove this overly broad pattern that captures names
     ]
     
     # Common Malaysian location keywords to help validate
@@ -29,7 +36,7 @@ def extract_location(text: str) -> str:
     ]
     
     for pattern in patterns:
-        match = re.search(pattern, text, re.IGNORECASE)
+        match = re.search(pattern, text_lower, re.IGNORECASE)
         if match:
             location = match.group(1).strip()
             # Clean up common words and fillers
