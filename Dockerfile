@@ -38,12 +38,15 @@ RUN uv pip install --system --no-cache \
     psycopg2-binary \
     chromadb \
     openai \
+    spacy \
+    rapidfuzz \
     google-oauth2-tool \
     google-auth-oauthlib \
     google-auth-httplib2 \
     google-api-python-client \
     requests
 
+RUN python -m spacy download en_core_web_sm
 # Copy application code
 COPY . .
 
