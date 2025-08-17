@@ -39,7 +39,18 @@ def extract_name(text: str) -> tuple[str, int]:
     location_indicators = ['in ', 'at ', 'from ', 'located', 'my house', 'my condo', 'my apartment', 'my office']
     text_lower = text.lower().strip()
     if any(indicator in text_lower for indicator in location_indicators):
-        return ""
+        return "", 0
+    
+    # Skip if text is likely a style preference response
+    style_indicators = ['cozy', 'modern', 'minimalist', 'contemporary', 'traditional', 
+                       'scandinavian', 'industrial', 'rustic', 'elegant', 'luxury', 
+                       'vintage', 'classic', 'warm', 'cool', 'bright', 'feel', 'vibe', 
+                       'aesthetic', 'look', 'theme', 'style']
+    
+    # If text is short and contains style indicators, likely a style preference
+    if (len(text_lower.split()) <= 5 and 
+        any(indicator in text_lower for indicator in style_indicators)):
+        return "", 0
     
     # First try spaCy for more accurate name detection
     if nlp:
@@ -62,8 +73,13 @@ def extract_name(text: str) -> tuple[str, int]:
         match = re.search(pattern, text_lower)
         if match:
             name = match.group(1).strip().title()
-            # Filter out common words that aren't names
-            if name.lower() not in ['interested', 'looking', 'here', 'ready', 'good', 'fine', 'okay', 'and', 'my', 'phone', 'is', 'looking for', 'interested in', 'planning to', 'hoping to', 'wanting to', 'trying to']:
+            # Filter out common words and style-related words that aren't names
+            excluded_words = ['interested', 'looking', 'here', 'ready', 'good', 'fine', 'okay', 'and', 'my', 'phone', 'is', 
+                            'looking for', 'interested in', 'planning to', 'hoping to', 'wanting to', 'trying to',
+                            'cozy', 'modern', 'minimalist', 'contemporary', 'traditional', 'scandinavian', 'industrial', 
+                            'rustic', 'elegant', 'luxury', 'vintage', 'classic', 'warm', 'cool', 'bright', 'feel', 'vibe', 
+                            'aesthetic', 'look', 'theme', 'style']
+            if name.lower() not in excluded_words:
                 # Stop at common connector words
                 words = name.split()
                 clean_words = []
