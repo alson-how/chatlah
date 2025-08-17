@@ -29,6 +29,10 @@ app.include_router(mcp_router)
 from app.merchant_api import router as merchant_router
 app.include_router(merchant_router, prefix="/api/v1")
 
+# Include admin router
+from admin.admin_api import router as admin_router
+app.include_router(admin_router)
+
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
@@ -260,6 +264,47 @@ def enhanced_late_capture(user_text: str, state: EnhancedConversationState) -> N
 # Core enhanced controller
 REASK_PREFIX = "Just to confirm,"
 
+def get_dynamic_field_configs():
+    """Get field configurations from admin settings."""
+    try:
+        from admin.admin_database import get_active_field_configs
+        return get_active_field_configs()
+    except Exception as e:
+        print(f"Error loading field configs: {e}")
+        # Fallback to default configuration
+        return [
+            {'field_name': 'name', 'question_text': 'May I have your name?', 'is_required': True, 'sort_order': 1},
+            {'field_name': 'phone', 'question_text': 'What\'s the best phone number to reach you?', 'is_required': True, 'sort_order': 2},
+            {'field_name': 'style', 'question_text': 'What kind of style or vibe you want?', 'is_required': True, 'sort_order': 3},
+            {'field_name': 'location', 'question_text': 'Which area is the property located?', 'is_required': True, 'sort_order': 4},
+            {'field_name': 'scope', 'question_text': 'Which spaces are in scope? For example, living, kitchen, master bedroom.', 'is_required': False, 'sort_order': 5}
+        ]
+
+def dynamic_next_slot(state: EnhancedConversationState) -> Optional[str]:
+    """Get next missing required field based on admin configuration."""
+    field_configs = get_dynamic_field_configs()
+    required_fields = [f for f in field_configs if f['is_required']]
+    required_fields.sort(key=lambda x: x['sort_order'])
+    
+    for field_config in required_fields:
+        field_name = field_config['field_name']
+        if not getattr(state, field_name, None):
+            return field_config['question_text']
+    
+    return None
+
+def is_ready_for_appointment_dynamic(state: EnhancedConversationState) -> bool:
+    """Check if all required fields are collected based on admin configuration."""
+    field_configs = get_dynamic_field_configs()
+    required_fields = [f for f in field_configs if f['is_required']]
+    
+    for field_config in required_fields:
+        field_name = field_config['field_name']
+        if not getattr(state, field_name, None):
+            return False
+    
+    return True
+
 def enhanced_handle_turn(user_text: str, state: EnhancedConversationState) -> str:
     """Enhanced slot-driven conversation handler with RAG integration and appointment scheduling."""
     state.turn_index += 1
@@ -267,16 +312,16 @@ def enhanced_handle_turn(user_text: str, state: EnhancedConversationState) -> st
     # 1) Late-capture anything provided this turn
     enhanced_late_capture(user_text, state)
 
-    # 2) Check if ready for appointment after capture
-    if state.is_ready_for_appointment() and state.next_slot() == Slot.SCOPE:
-        # We have name, phone, style, location - proceed to appointment
+    # 2) Check if ready for appointment after capture using dynamic config
+    if is_ready_for_appointment_dynamic(state):
+        # We have all required fields - proceed to appointment
         import random
         appointment_msg = random.choice(APPOINTMENT_MESSAGES)
         return appointment_msg.format(
-            name=state.name,
-            phone=state.phone,
-            style=state.style,
-            location=state.location
+            name=state.name or 'there',
+            phone=state.phone or 'your contact',
+            style=getattr(state, 'style', 'your preferred style') or 'your preferred style',
+            location=getattr(state, 'location', 'your location') or 'your location'
         )
 
     # 3) High-priority: Portfolio intent (always answer first)
@@ -296,26 +341,31 @@ def enhanced_handle_turn(user_text: str, state: EnhancedConversationState) -> st
         style_probe = SLOT_QUESTIONS[Slot.STYLE]
         return (rag_line + ("\n" if rag_line else "") + style_probe).strip()
 
-    # 6) Check if user answered current slot this turn
-    new_slot = state.next_slot()
-    if new_slot != slot:
+    # 6) Check if user answered current slot this turn - use dynamic slot checking
+    next_question = dynamic_next_slot(state)
+    if not next_question:
         # Check for appointment readiness after slot progression
-        if state.is_ready_for_appointment():
+        if is_ready_for_appointment_dynamic(state):
             import random
             appointment_msg = random.choice(APPOINTMENT_MESSAGES)
             return appointment_msg.format(
-                name=state.name,
-                phone=state.phone,
-                style=state.style,
-                location=state.location
+                name=state.name or 'there',
+                phone=state.phone or 'your contact',
+                style=getattr(state, 'style', 'your preferred style') or 'your preferred style',
+                location=getattr(state, 'location', 'your location') or 'your location'
             )
         
         # Optional: if style was just captured, send matching project link
-        if new_slot == Slot.LOCATION and mentions_theme(user_text):
+        if hasattr(state, 'style') and state.style and mentions_theme(user_text):
             link = resolve_theme_url(user_text)
             if link:
-                return f"Sure—here's one project that fits: {link}\n{SLOT_QUESTIONS[new_slot]}"
-        return SLOT_QUESTIONS[new_slot]
+                return f"Sure—here's one project that fits: {link}\nWhat else would you like to know?"
+        
+        return "Thank you for providing all the information! Our team will be in touch soon."
+    
+    # If there's a next question to ask, check if it's different from what we would have asked before
+    if next_question and next_question != SLOT_QUESTIONS.get(slot, ""):
+        return next_question
 
     # 7) Enhanced off-topic handling with smart phone policy
     rag_line = rag_answer_one_liner(user_text)

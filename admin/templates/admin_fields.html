@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chatbot Fields Configuration - Admin Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+        }
+        
+        .header {
+            background: #2c3e50;
+            color: white;
+            padding: 1rem 2rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .header h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+        }
+        
+        .nav {
+            background: white;
+            padding: 0 2rem;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        
+        .nav-links {
+            display: flex;
+            list-style: none;
+        }
+        
+        .nav-links li {
+            margin-right: 2rem;
+        }
+        
+        .nav-links a {
+            display: block;
+            padding: 1rem 0;
+            text-decoration: none;
+            color: #666;
+            font-weight: 500;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s ease;
+        }
+        
+        .nav-links a:hover,
+        .nav-links a.active {
+            color: #3498db;
+            border-bottom-color: #3498db;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 2rem auto;
+            padding: 0 2rem;
+        }
+        
+        .page-title {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+            color: #2c3e50;
+        }
+        
+        .page-subtitle {
+            color: #666;
+            margin-bottom: 2rem;
+            font-size: 1.1rem;
+        }
+        
+        .add-field-section {
+            background: white;
+            border-radius: 12px;
+            padding: 2rem;
+            box-shadow: 0 2px 20px rgba(0,0,0,0.1);
+            margin-bottom: 2rem;
+        }
+        
+        .add-field-form {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1rem;
+            align-items: end;
+        }
+        
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .form-group label {
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+        
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            padding: 0.75rem;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1rem;
+            transition: border-color 0.3s ease;
+        }
+        
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: #3498db;
+        }
+        
+        .form-group textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+        
+        .form-group-full {
+            grid-column: 1 / -1;
+        }
+        
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        
+        .checkbox-group input[type="checkbox"] {
+            width: auto;
+        }
+        
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-primary {
+            background: #3498db;
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #2980b9;
+        }
+        
+        .btn-success {
+            background: #27ae60;
+            color: white;
+        }
+        
+        .btn-success:hover {
+            background: #229954;
+        }
+        
+        .btn-danger {
+            background: #e74c3c;
+            color: white;
+        }
+        
+        .btn-danger:hover {
+            background: #c0392b;
+        }
+        
+        .btn-sm {
+            padding: 0.5rem 1rem;
+            font-size: 0.875rem;
+        }
+        
+        .fields-table-section {
+            background: white;
+            border-radius: 12px;
+            padding: 2rem;
+            box-shadow: 0 2px 20px rgba(0,0,0,0.1);
+        }
+        
+        .fields-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+        
+        .fields-table th,
+        .fields-table td {
+            padding: 1rem;
+            text-align: left;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        
+        .fields-table th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+        
+        .fields-table tr:hover {
+            background: #f8f9fa;
+        }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+        
+        .status-active {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .status-inactive {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        .required-badge {
+            background: #fff3cd;
+            color: #856404;
+        }
+        
+        .actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+        
+        .status-message {
+            margin-bottom: 1rem;
+            padding: 1rem;
+            border-radius: 8px;
+            font-weight: 500;
+            display: none;
+        }
+        
+        .status-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        .status-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        .loading {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #3498db;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 8px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+        }
+        
+        .modal-content {
+            background-color: white;
+            margin: 5% auto;
+            padding: 2rem;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 600px;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.5rem;
+        }
+        
+        .close {
+            color: #999;
+            font-size: 28px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        
+        .close:hover {
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>RAG System Admin Dashboard</h1>
+    </div>
+    
+    <nav class="nav">
+        <ul class="nav-links">
+            <li><a href="/admin">Website Crawling</a></li>
+            <li><a href="/admin/fields" class="active">Chatbot Fields</a></li>
+            <li><a href="/chat">Chat Interface</a></li>
+            <li><a href="/leads-dashboard">Leads Dashboard</a></li>
+        </ul>
+    </nav>
+    
+    <div class="container">
+        <h1 class="page-title">Chatbot Fields Configuration</h1>
+        <p class="page-subtitle">Configure what information the chatbot collects and customize the questions asked to users</p>
+        
+        <div id="statusMessage" class="status-message"></div>
+        
+        <div class="add-field-section">
+            <h2 style="margin-bottom: 1.5rem; color: #2c3e50;">Add New Field</h2>
+            <form id="addFieldForm" class="add-field-form">
+                <div class="form-group">
+                    <label for="fieldName">Field Name *</label>
+                    <input type="text" id="fieldName" name="fieldName" placeholder="e.g., budget" required>
+                </div>
+                <div class="form-group">
+                    <label for="fieldLabel">Field Label *</label>
+                    <input type="text" id="fieldLabel" name="fieldLabel" placeholder="e.g., Budget Range" required>
+                </div>
+                <div class="form-group">
+                    <label for="fieldType">Field Type</label>
+                    <select id="fieldType" name="fieldType">
+                        <option value="text">Text</option>
+                        <option value="phone">Phone</option>
+                        <option value="email">Email</option>
+                        <option value="textarea">Textarea</option>
+                        <option value="number">Number</option>
+                        <option value="choice">Multiple Choice</option>
+                    </select>
+                </div>
+                <div class="form-group form-group-full">
+                    <label for="questionText">Question Text *</label>
+                    <textarea id="questionText" name="questionText" placeholder="What question should the chatbot ask to collect this information?" required></textarea>
+                </div>
+                <div class="form-group">
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="isRequired" name="isRequired">
+                        <label for="isRequired">Required Field</label>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <button type="submit" class="btn btn-primary">
+                        <span id="addBtnText">Add Field</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+        
+        <div class="fields-table-section">
+            <h2 style="margin-bottom: 1rem; color: #2c3e50;">Current Fields Configuration</h2>
+            <div style="overflow-x: auto;">
+                <table class="fields-table">
+                    <thead>
+                        <tr>
+                            <th>Field Name</th>
+                            <th>Label</th>
+                            <th>Type</th>
+                            <th>Question</th>
+                            <th>Required</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="fieldsTableBody">
+                        <!-- Fields will be loaded here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Edit Field Modal -->
+    <div id="editModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Edit Field</h2>
+                <span class="close" onclick="closeEditModal()">&times;</span>
+            </div>
+            <form id="editFieldForm">
+                <input type="hidden" id="editFieldId">
+                <div class="form-group">
+                    <label for="editFieldLabel">Field Label *</label>
+                    <input type="text" id="editFieldLabel" required>
+                </div>
+                <div class="form-group">
+                    <label for="editFieldType">Field Type</label>
+                    <select id="editFieldType">
+                        <option value="text">Text</option>
+                        <option value="phone">Phone</option>
+                        <option value="email">Email</option>
+                        <option value="textarea">Textarea</option>
+                        <option value="number">Number</option>
+                        <option value="choice">Multiple Choice</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="editQuestionText">Question Text *</label>
+                    <textarea id="editQuestionText" required></textarea>
+                </div>
+                <div class="form-group">
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="editIsRequired">
+                        <label for="editIsRequired">Required Field</label>
+                    </div>
+                </div>
+                <div style="display: flex; gap: 1rem; justify-content: flex-end; margin-top: 1.5rem;">
+                    <button type="button" class="btn" onclick="closeEditModal()" style="background: #95a5a6; color: white;">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        let fieldConfigs = [];
+        
+        // Load field configurations on page load
+        async function loadFieldConfigs() {
+            try {
+                const response = await fetch('/admin/api/fields');
+                const data = await response.json();
+                fieldConfigs = data.field_configs;
+                renderFieldsTable();
+            } catch (error) {
+                showMessage('Error loading field configurations: ' + error.message, 'error');
+            }
+        }
+        
+        // Render fields table
+        function renderFieldsTable() {
+            const tbody = document.getElementById('fieldsTableBody');
+            tbody.innerHTML = '';
+            
+            fieldConfigs.forEach(field => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td><strong>${field.field_name}</strong></td>
+                    <td>${field.field_label}</td>
+                    <td>${field.field_type}</td>
+                    <td>${field.question_text.length > 50 ? field.question_text.substring(0, 50) + '...' : field.question_text}</td>
+                    <td>${field.is_required ? '<span class="status-badge required-badge">Required</span>' : 'Optional'}</td>
+                    <td><span class="status-badge ${field.is_active ? 'status-active' : 'status-inactive'}">${field.is_active ? 'Active' : 'Inactive'}</span></td>
+                    <td>
+                        <div class="actions">
+                            <button class="btn btn-sm btn-primary" onclick="editField(${field.id})">Edit</button>
+                            <button class="btn btn-sm ${field.is_active ? 'btn-danger' : 'btn-success'}" onclick="toggleField(${field.id})">
+                                ${field.is_active ? 'Disable' : 'Enable'}
+                            </button>
+                            <button class="btn btn-sm btn-danger" onclick="deleteField(${field.id})" style="background: #e74c3c;">Delete</button>
+                        </div>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+        
+        // Add new field
+        document.getElementById('addFieldForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(e.target);
+            const fieldData = {
+                field_name: formData.get('fieldName'),
+                field_label: formData.get('fieldLabel'),
+                field_type: formData.get('fieldType'),
+                question_text: formData.get('questionText'),
+                is_required: formData.get('isRequired') === 'on'
+            };
+            
+            const addBtn = document.getElementById('addBtnText');
+            addBtn.innerHTML = '<span class="loading"></span>Adding...';
+            
+            try {
+                const response = await fetch('/admin/api/fields', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(fieldData)
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showMessage('Field added successfully!', 'success');
+                    e.target.reset();
+                    loadFieldConfigs();
+                } else {
+                    throw new Error(result.detail || 'Failed to add field');
+                }
+            } catch (error) {
+                showMessage('Error: ' + error.message, 'error');
+            } finally {
+                addBtn.textContent = 'Add Field';
+            }
+        });
+        
+        // Edit field
+        function editField(fieldId) {
+            const field = fieldConfigs.find(f => f.id === fieldId);
+            if (!field) return;
+            
+            document.getElementById('editFieldId').value = fieldId;
+            document.getElementById('editFieldLabel').value = field.field_label;
+            document.getElementById('editFieldType').value = field.field_type;
+            document.getElementById('editQuestionText').value = field.question_text;
+            document.getElementById('editIsRequired').checked = field.is_required;
+            
+            document.getElementById('editModal').style.display = 'block';
+        }
+        
+        function closeEditModal() {
+            document.getElementById('editModal').style.display = 'none';
+        }
+        
+        // Save edited field
+        document.getElementById('editFieldForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const fieldId = document.getElementById('editFieldId').value;
+            const updateData = {
+                field_label: document.getElementById('editFieldLabel').value,
+                field_type: document.getElementById('editFieldType').value,
+                question_text: document.getElementById('editQuestionText').value,
+                is_required: document.getElementById('editIsRequired').checked
+            };
+            
+            try {
+                const response = await fetch(`/admin/api/fields/${fieldId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(updateData)
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showMessage('Field updated successfully!', 'success');
+                    closeEditModal();
+                    loadFieldConfigs();
+                } else {
+                    throw new Error(result.detail || 'Failed to update field');
+                }
+            } catch (error) {
+                showMessage('Error: ' + error.message, 'error');
+            }
+        });
+        
+        // Toggle field active status
+        async function toggleField(fieldId) {
+            try {
+                const response = await fetch(`/admin/api/fields/${fieldId}/toggle`, {
+                    method: 'POST'
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showMessage('Field status updated successfully!', 'success');
+                    loadFieldConfigs();
+                } else {
+                    throw new Error(result.detail || 'Failed to toggle field');
+                }
+            } catch (error) {
+                showMessage('Error: ' + error.message, 'error');
+            }
+        }
+        
+        // Delete field
+        async function deleteField(fieldId) {
+            if (!confirm('Are you sure you want to delete this field? This action cannot be undone.')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/admin/api/fields/${fieldId}`, {
+                    method: 'DELETE'
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showMessage('Field deleted successfully!', 'success');
+                    loadFieldConfigs();
+                } else {
+                    throw new Error(result.detail || 'Failed to delete field');
+                }
+            } catch (error) {
+                showMessage('Error: ' + error.message, 'error');
+            }
+        }
+        
+        // Show status message
+        function showMessage(message, type) {
+            const statusMessage = document.getElementById('statusMessage');
+            statusMessage.textContent = message;
+            statusMessage.className = `status-message status-${type}`;
+            statusMessage.style.display = 'block';
+            
+            setTimeout(() => {
+                statusMessage.style.display = 'none';
+            }, 5000);
+        }
+        
+        // Close modal when clicking outside
+        window.onclick = function(event) {
+            const modal = document.getElementById('editModal');
+            if (event.target === modal) {
+                closeEditModal();
+            }
+        }
+        
+        // Load initial data
+        loadFieldConfigs();
+    </script>
+</body>
+</html>
