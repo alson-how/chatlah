@@ -321,7 +321,10 @@ def chat_endpoint(req: ChatRequest):
     user_text = req.user_message
 
     # Extract and store all information from every message
-    name, name_score = extract_name(user_text)  # Now returns tuple
+    try:
+        name, name_score = extract_name(user_text)  # Now returns tuple
+    except (ValueError, TypeError):
+        name, name_score = "", 0
     phone = extract_phone(user_text)
     location = extract_location(user_text)
     
