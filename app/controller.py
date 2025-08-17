@@ -1,6 +1,6 @@
 # controller.py (inside your turn handler)
-from rag_assist import maybe_rag_line
-from phone_policy import next_phone_prompt, mark_phone_prompted
+from app.rag_assist import maybe_rag_line
+from app.phone_policy import next_phone_prompt, mark_phone_prompted
 
 def handle_turn(user_text: str, state) -> str:
     state.turn_index += 1

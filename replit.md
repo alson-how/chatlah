@@ -2,7 +2,7 @@
 
 ## Overview
 
-This is a production-ready multi-tenant RAG system designed for merchant onboarding and configurable conversational AI. It integrates web crawling, content indexing, and intelligent business conversations. The system allows merchants to define custom information collection fields, conversation flows, and question templates, adapting to diverse industry requirements. It automatically crawls websites, processes and stores content in a vector database, and facilitates intelligent conversations via a FastAPI backend and an interactive merchant setup interface. The project aims to provide adaptable and efficient lead generation and customer interaction for various businesses.
+This is a production-ready multi-tenant RAG system designed for merchant onboarding and configurable conversational AI with Google Calendar integration for automatic appointment scheduling. It integrates web crawling, content indexing, and intelligent business conversations. The system allows merchants to define custom information collection fields, conversation flows, and question templates, adapting to diverse industry requirements. It automatically crawls websites, processes and stores content in a vector database, and facilitates intelligent conversations via a FastAPI backend with an interactive admin dashboard. The project aims to provide adaptable and efficient lead generation, customer interaction, and automated appointment booking for various businesses.
 
 ## User Preferences
 
@@ -38,7 +38,10 @@ Preferred communication style: Simple, everyday language.
 - **Theme Detection**: Intelligent style/aesthetic query detection with portfolio URL mapping.
 
 ### User Interface Architecture
-- **Web Crawler Interface**: For website crawling and content management.
+- **Admin Dashboard**: Comprehensive management interface with three main sections:
+  - Website Crawling: For content management and indexing
+  - Chatbot Fields: Custom field configuration for lead collection
+  - Calendar Setup: Google OAuth2 integration for appointment scheduling
 - **Enhanced Chatbot Interface**: Professional chat interface with a Malaysian business persona.
 - **Merchant Setup Interface**: Comprehensive onboarding system with template selection, custom field builder (drag-and-drop, various field types), and conversation tone settings.
 - **Responsive Design**: Mobile-friendly interfaces with modern UI components.
