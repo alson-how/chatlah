@@ -25,6 +25,13 @@ Preferred communication style: Simple, everyday language.
 - **TESTING CONFIRMED**: Both legacy Jablanc Interior workflows and new multi-tenant merchant configurations work seamlessly
 - **PRODUCTION READY**: All conversation flows functioning with proper data collection and storage
 
+✅ **Enhanced Intent Detection & Portfolio System - COMPLETED**:
+- Added sophisticated intent detection module (`app/intents.py`) with portfolio, pricing, consultation, and service intent recognition
+- Enhanced portfolio preview system (`app/portfolio_preview.py`) integrated with existing ChromaDB search
+- Upgraded RAG assistant with context-aware responses based on detected intents
+- **TESTING CONFIRMED**: Portfolio queries return relevant examples with contextual information
+- Multi-intent detection with priority-based response routing for better user experience
+
 ## System Architecture
 
 ### Backend Framework
@@ -32,9 +39,11 @@ Preferred communication style: Simple, everyday language.
 - **Modular Design**: Clean separation of concerns with specialized conversation modules:
   - `controller.py`: Main conversation flow orchestration
   - `late_capture.py`: Multi-field information extraction
-  - `rag_assist.py`: Intelligent question answering
+  - `rag_assist.py`: Enhanced intelligent question answering with intent detection
   - `optimized_chat.py`: Multi-tenant conversation management
   - `slots.py`: Conversation state and field definitions
+  - `intents.py`: Intent detection for portfolio, pricing, consultation, and services
+  - `portfolio_preview.py`: Automated portfolio example generation
 - **Exception Handling**: Centralized error handling with structured error responses
 - **Session Management**: ConversationState-based architecture with persistent storage
 
