@@ -1,7 +1,8 @@
 # app/optimized_chat.py
 from typing import Dict
 from app.slots import ConversationState
-from app.controller import craft_reply
+from app.rag_assist import maybe_rag_line
+from app.late_capture import parse_all
 from app.database import get_merchant_config, save_consumer_data, get_conversation_session, save_conversation_session
 
 # Global session storage - in production, use Redis or database
@@ -46,8 +47,35 @@ def handle_merchant_chat(thread_id: str, user_text: str, merchant_id: int) -> di
         else:
             state = ConversationState()
         
-        # Use the modular controller to craft reply
-        reply, new_state = craft_reply(user_text, state)
+        # Process conversation using enhanced modules
+        # 1) Late capture any fields from user message
+        parsed = parse_all(user_text)
+        if parsed["name"] and not state.name:         state.name = parsed["name"]
+        if parsed["phone"] and not state.phone:       state.phone = parsed["phone"]
+        if parsed["style"] and not state.style:       state.style = parsed["style"]
+        if parsed["location"] and not state.location: state.location = parsed["location"]
+        
+        # 2) Try to answer with enhanced RAG (includes intent detection and portfolio preview)
+        rag_response = maybe_rag_line(user_text)
+        if rag_response:
+            reply = rag_response
+            # Continue conversation flow after answering
+            next_slot = state.next_slot()
+            if next_slot.name != 'NONE':
+                from app.api import next_missing_after_portfolio
+                follow_up = next_missing_after_portfolio(state)
+                if follow_up:
+                    reply += f"\n{follow_up}"
+        else:
+            # 3) Normal conversation flow - ask for next missing field
+            next_slot = state.next_slot()
+            if next_slot.name == 'NONE':
+                reply = "Thank you! I have all the information I need."
+            else:
+                from app.slots import QUESTIONS
+                reply = QUESTIONS[next_slot]
+        
+        new_state = state
         
         # Convert state back to collected data
         collected_data = {

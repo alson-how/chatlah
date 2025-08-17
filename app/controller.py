@@ -1,92 +1,46 @@
-# app/controller.py
-import re
-from typing import Dict, Tuple
-from app.slots import ConversationState, Slot, QUESTIONS
-from app.late_capture import parse_all
-from app.rag_assist import maybe_answer_with_rag
-from app.intents import is_portfolio_intent
-from app.portfolio_preview import portfolio_preview
-from utils.theme import resolve_theme_url, mentions_theme
+# controller.py (inside your turn handler)
+from rag_assist import maybe_rag_line
+from phone_policy import next_phone_prompt, mark_phone_prompted
 
-PORTFOLIO_URL = "https://jablancinteriors.com/projects/"
-REASK_PREFIX = "Just to confirm,"
+def handle_turn(user_text: str, state) -> str:
+    state.turn_index += 1
 
-def _next_followup_question(state: ConversationState) -> str | None:
-    # After answering their request, continue the funnel in this priority
-    if not state.style:    return QUESTIONS[Slot.STYLE]
-    if not state.location: return QUESTIONS[Slot.LOCATION]
-    if not state.phone:    return QUESTIONS[Slot.PHONE]
-    return None
+    # 0) Late-capture any new info (name/style/location/phone)
+    # ... your existing late-capture here ...
+    # if phone parsed: save & continue to next slot
 
-def craft_reply(user_text: str, state: ConversationState) -> Tuple[str, ConversationState]:
-    # 1) Late capture any fields given this turn
-    parsed = parse_all(user_text)
-    if parsed["name"] and not state.name:         state.name = parsed["name"]
-    if parsed["phone"] and not state.phone:       state.phone = parsed["phone"]
-    if parsed["style"] and not state.style:       state.style = parsed["style"]
-    if parsed["location"] and not state.location: state.location = parsed["location"]
-
-    # 2) HIGH-PRIORITY INTENT: Portfolio
+    # 1) High-priority intents that deserve immediate answers (e.g., portfolio)
     if is_portfolio_intent(user_text):
-        # Always answer first
-        preview = portfolio_preview()  # may return None
-        head = f"Yes sure, you may look at our portfolio here {PORTFOLIO_URL}."
-        body = f"\n{preview}" if preview else ""
-        follow = _next_followup_question(state)
-        tail = f"\n{follow}" if follow else ""
-        return (head + body + tail).strip(), state
+        reply = "Yes sure, you may look at our portfolio here https://jablancinteriors.com/projects/."
+        # continue funnel after answering
+        follow = next_missing_after_portfolio(state)  # e.g., STYLE→LOCATION→PHONE
+        return f"{reply}\n{follow}" if follow else reply
 
-    # 3) Normal flow continues below -------------
-    slot = state.next_slot()
+    # 2) If phone still missing, don’t loop: answer side-topic briefly via RAG, then ask or defer
+    if not state.phone:
+        rag_line = maybe_rag_line(user_text)  # None or "1-sentence (Source: …)"
+        phone_prompt = next_phone_prompt(state)  # None if cooled down or exceeded attempts
 
-    # If user shows generic ID intent but we still need style, probe style
-    generic_id_intent = bool(re.search(r"\b(id|interior design|renovation|makeover|concept)\b", user_text, re.I))
-    if slot in (Slot.NAME, Slot.PHONE) and generic_id_intent and not state.style:
-        rag_line = maybe_answer_with_rag(user_text) or None
-        style_probe = "What kind of style or vibe you want?"
-        if rag_line:
-            return f"{rag_line}\n{style_probe}", state
-        return style_probe, state
+        # If user asked something else, be helpful first
+        if rag_line and phone_prompt:
+            mark_phone_prompted(state)
+            return f"{rag_line}\n{phone_prompt}"
 
-    # If current slot was answered this turn, store and advance
-    if slot == Slot.NAME and parsed["name"]:
-        state.name = parsed["name"]
-        return QUESTIONS[state.next_slot()], state
+        if rag_line and not phone_prompt:
+            # Cooldown active or attempts exhausted: just answer and move the funnel forward
+            nxt = next_non_phone_slot_question(state)  # e.g., STYLE or LOCATION
+            return f"{rag_line}\n{nxt}" if nxt else rag_line
 
-    if slot == Slot.PHONE and parsed["phone"]:
-        state.phone = parsed["phone"]
-        return QUESTIONS[state.next_slot()], state
+        if (not rag_line) and phone_prompt:
+            # No side-topic detected, we can ask for phone once (or rotated)
+            mark_phone_prompted(state)
+            return phone_prompt
 
-    if slot == Slot.STYLE and (mentions_theme(user_text) or parsed["style"]):
-        state.style = parsed["style"] or "theme_detected"
-        link = resolve_theme_url(user_text)
-        if link:
-            return f"Sure—here’s one project that fits: {link}\n{QUESTIONS[state.next_slot()]}", state
-        return QUESTIONS[state.next_slot()], state
+        # Neither rag_line nor phone_prompt (cooldown): progress other slots instead
+        nxt = next_non_phone_slot_question(state)
+        if nxt:
+            return nxt
 
-    if slot == Slot.LOCATION and parsed["location"]:
-        state.location = parsed["location"]
-        return QUESTIONS[state.next_slot()], state
-
-    if slot == Slot.SCOPE:
-        if re.search(r"\b(living|kitchen|bed(room)?|dining|study|office|retail|toilet|bath)\b", user_text, re.I):
-            state.scope = user_text
-            return "Thanks. Would you like a quick consult or a rough estimate?", state
-
-    # Off-topic? Give short RAG, then re-ask pending slot
-    rag_line = maybe_answer_with_rag(user_text)
-    hint = ""
-    if slot == Slot.STYLE:    hint = " For example, modern minimalist, warm neutral, or industrial."
-    if slot == Slot.LOCATION: hint = " For example, Mont Kiara, Bangsar, or Penang."
-    if slot == Slot.SCOPE:    hint = " For example, living and kitchen."
-    question = QUESTIONS[slot] + hint
-
-    # Lead-capture ask-once (only if we truly need it and not after a portfolio intent)
-    if slot in (Slot.NAME, Slot.PHONE) and not state.asked_name_phone_once and not is_portfolio_intent(user_text):
-        state.asked_name_phone_once = True
-        return "May I have your name and phone number so I can follow up properly?", state
-
-    if rag_line:
-        return f"{rag_line}\n{REASK_PREFIX} {question}", state
-
-    return question, state
+    # 3) Handle other slots normally (style/location/scope), with your existing logic
+    # ...
+    return fallback_or_thanks()

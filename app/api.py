@@ -18,6 +18,7 @@ import requests
 import time
 import os
 import re
+from typing import Optional
 
 app = FastAPI(title="RAG Site API", version="1.0.0")
 app.include_router(mcp_router)
@@ -54,6 +55,24 @@ CHAT_SESSIONS = {
 }  # {thread_id: {"summary": str, "turns": [(role, content), ...], "first_turn": bool, "name": str, "phone": str}}
 
 # TONE_PROMPT removed - now using load_system_prompt() to load from /tone folder
+
+def next_missing_after_portfolio(state) -> Optional[str]:
+    """Get next missing field question after portfolio interaction."""
+    if not state.style:
+        return "What kind of style or vibe you want?"
+    if not state.location:
+        return "Which area is the property located?"
+    if not state.phone:
+        return "What's the best phone number to reach you?"
+    return None
+
+def next_non_phone_slot_question(state) -> Optional[str]:
+    """Get next non-phone field question for conversation flow."""
+    if not state.style:
+        return "What kind of style or vibe you want?"
+    if not state.location:
+        return "Which area is the property located?"
+    return None
 
 
 @app.get("/")

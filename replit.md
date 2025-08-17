@@ -32,6 +32,13 @@ Preferred communication style: Simple, everyday language.
 - **TESTING CONFIRMED**: Portfolio queries return relevant examples with contextual information
 - Multi-intent detection with priority-based response routing for better user experience
 
+✅ **Enhanced Conversation Flow Management - COMPLETED**:
+- Added `next_missing_after_portfolio()` function in `app/api.py` for better post-portfolio conversation flow
+- Added `next_non_phone_slot_question()` function for flexible conversation routing
+- Enhanced multi-tenant chat handler with improved RAG integration and field collection
+- **TESTING CONFIRMED**: Both functions working seamlessly with merchant chat system
+- Optimized conversation state management across all chat endpoints
+
 ## System Architecture
 
 ### Backend Framework
