@@ -11,6 +11,8 @@ from app.retriever import search
 
 class Intent(Enum):
     PORTFOLIO = auto()
+    SERVICES = auto()
+    PRICING = auto()
     GENERIC_ID = auto()
     INFO_REQUEST = auto()
     OFFICE_ADDRESS = auto()
@@ -35,6 +37,16 @@ OFFICE_ADDRESS_TRIGGERS = ("where are you located", "office address",
                            "where can I find you", "your office", "location",
                            "where are you")
 
+# Services-specific triggers
+SERVICES_TRIGGERS = ("services", "what do you do", "what services", 
+                    "interior design services", "your services", "service", 
+                    "what can you do", "offerings", "what you offer")
+
+# Pricing-specific triggers (using word boundaries to avoid false matches)
+PRICING_TRIGGERS = ("price", "cost", "how much", "pricing", "budget", 
+                   "expensive", "cheap", "rate", " fee ", "charge", 
+                   "what does it cost", "how much does", "what's the cost")
+
 GENERIC_ID_PATTERN = r"\b(id|interior design|renovation|makeover|concept)\b"
 
 
@@ -43,11 +55,46 @@ def detect_intent(text: str) -> Intent:
     if not text:
         return Intent.NONE
 
-    text_lower = text.lower()
+    text_lower = text.lower().strip()
+    
+    # Check if this is likely a style preference response (not a question)
+    style_indicators = ['cozy', 'modern', 'minimalist', 'contemporary', 'traditional', 
+                       'scandinavian', 'industrial', 'rustic', 'elegant', 'luxury', 
+                       'vintage', 'classic', 'warm', 'cool', 'bright', 'feel', 'vibe', 
+                       'aesthetic', 'look', 'theme', 'style']
+    
+    # If it's a short response with style indicators and no explicit pricing words, 
+    # don't classify as pricing intent
+    is_style_response = (len(text_lower.split()) <= 5 and 
+                        any(indicator in text_lower for indicator in style_indicators) and
+                        not any(explicit_price in text_lower for explicit_price in 
+                               ['how much', 'cost', 'price', 'expensive', 'cheap', 'rate', 'fee', 'charge']))
 
     # Office address intent has highest priority for location queries
     if any(trigger in text_lower for trigger in OFFICE_ADDRESS_TRIGGERS):
         return Intent.OFFICE_ADDRESS
+
+    # Pricing intent has high priority to handle pricing questions specifically
+    # But exclude style responses and use more precise matching
+    if not is_style_response:
+        # Check for explicit pricing questions with word boundaries
+        pricing_match = False
+        for trigger in PRICING_TRIGGERS:
+            if trigger.strip() == "fee":
+                # Special case for "fee" - check if it's a standalone word
+                if re.search(r'\bfee\b', text_lower):
+                    pricing_match = True
+                    break
+            elif trigger in text_lower:
+                pricing_match = True
+                break
+        
+        if pricing_match:
+            return Intent.PRICING
+        
+    # Services intent to provide services information
+    if any(trigger in text_lower for trigger in SERVICES_TRIGGERS):
+        return Intent.SERVICES
 
     # Portfolio intent has high priority
     if any(trigger in text_lower for trigger in PORTFOLIO_TRIGGERS):
@@ -57,8 +104,8 @@ def detect_intent(text: str) -> Intent:
     if re.search(GENERIC_ID_PATTERN, text, re.I):
         return Intent.GENERIC_ID
 
-    # Information request intent
-    if any(trigger in text_lower for trigger in INFO_TRIGGERS):
+    # Information request intent (but exclude style responses)
+    if not is_style_response and any(trigger in text_lower for trigger in INFO_TRIGGERS):
         return Intent.INFO_REQUEST
 
     return Intent.NONE
@@ -103,7 +150,6 @@ def handle_portfolio_intent(
 
     # Generate intelligent follow-up based on missing information and context
     follow_up = get_intelligent_portfolio_followup(text, state)
-    print(follow_up)  # Line 98: This prints the follow-up question to console
     
     response = (head + body).strip()
     if follow_up:
@@ -154,9 +200,15 @@ def get_intelligent_portfolio_followup(user_text: str, state) -> Optional[str]:
         elif "style" in missing_fields:
             return "What design style are you considering?"
 
-    # Smart prioritization based on conversation flow
+    # Smart prioritization based on conversation flow (skip name if already collected)
     field_configs = get_dynamic_field_configs()
-    priority_order = ["name", "phone", "style", "location", "budget"]
+    
+    # For portfolio follow-ups, prioritize business-relevant fields over personal details
+    # Skip name if already collected, focus on project details first
+    if state.name:
+        priority_order = ["style", "location", "budget", "phone"]
+    else:
+        priority_order = ["name", "style", "location", "budget", "phone"]
 
     for field_name in priority_order:
         if field_name in missing_fields:
@@ -194,10 +246,15 @@ def portfolio_preview(max_items: int = 3) -> Optional[str]:
 
 
 def rag_answer_one_liner(user_text: str,
-                         max_chars: int = 220) -> Optional[str]:
+                         max_chars: int = 220,
+                         state=None) -> Optional[str]:
     """Answer side-questions briefly using RAG (1 sentence + 1 source)."""
     if not is_info_request_intent(user_text):
         return None
+
+    # Check if we have the user's name before providing detailed information
+    if state and not getattr(state, 'name', None):
+        return None  # Don't provide RAG info without name
 
     hits = search(user_text, top_k=2) or []
     if not hits:
@@ -246,7 +303,17 @@ def respond_with_intent(
     portfolio_url: str = "https://jablancinteriors.com/projects/"
 ) -> Optional[str]:
     """Generate response based on detected intent."""
-    if intent == Intent.PORTFOLIO:
+    if intent == Intent.SERVICES:
+        # Handle services inquiry - provide services info first, then ask for name
+        services_info = get_services_info_from_rag()
+        follow_up = "May I have your name and phone number so I can follow up properly?"
+        return f"{services_info}\n{follow_up}"
+        
+    elif intent == Intent.PRICING:
+        # Handle pricing inquiry with standard response
+        return "It's depending on the style you want. Let's talk more when we meet. May I have your name and phone number so I can follow up properly?"
+        
+    elif intent == Intent.PORTFOLIO:
         # Use optimized portfolio handler with intelligent follow-ups
         return handle_portfolio_intent(user_text, state, portfolio_url)
 
@@ -259,6 +326,15 @@ def respond_with_intent(
         return "Please contact us for our office address details."
 
     elif intent == Intent.INFO_REQUEST:
-        return rag_answer_one_liner(user_text)
+        # Check if we have the user's name before providing detailed information
+        if not state.name:
+            return "Before that, can I know who am I speaking to?"
+        return rag_answer_one_liner(user_text, state=state)
 
     return None
+
+
+def get_services_info_from_rag() -> str:
+    """Get services information from RAG or provide default services info."""
+    # Clean fallback services description with proper link
+    return "Hi there, this is Mei Yee from Jablanc Interior. We offer comprehensive interior design services including space planning, renovation, furniture selection, and complete home makeovers. Check out our full services: https://jablancinteriors.com/services/"
