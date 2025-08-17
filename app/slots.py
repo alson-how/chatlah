@@ -3,7 +3,7 @@ Slot management for conversational AI.
 Handles conversation state, slot progression, and question generation.
 """
 
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, asdict, field
 from enum import Enum, auto
 from typing import Optional, Dict, List
 import random
@@ -55,9 +55,16 @@ class ConversationState:
     asked_phone_count: int = 0
     last_phone_prompt_turn: int = -1
     
+    # Checklist tracking for better question rotation
+    last_asked_field: Optional[str] = None
+    field_ask_counts: Dict[str, int] = field(default_factory=lambda: {"name": 0, "phone": 0, "style": 0, "location": 0, "scope": 0})
+    last_field_ask_turn: Dict[str, int] = field(default_factory=lambda: {"name": -1, "phone": -1, "style": -1, "location": -1, "scope": -1})
+    
     # Generic control
     asked_name_phone_once: bool = False
     turn_index: int = 0
+    
+
     
     def next_slot(self) -> Slot:
         """Determine the next slot that needs to be filled."""
@@ -92,17 +99,16 @@ def get_dynamic_field_configs() -> List[Dict]:
         ]
 
 def dynamic_next_slot(state: ConversationState) -> Optional[str]:
-    """Get next missing required field based on admin configuration."""
-    field_configs = get_dynamic_field_configs()
-    required_fields = [f for f in field_configs if f['is_required']]
-    required_fields.sort(key=lambda x: x['sort_order'])
-    
-    for field_config in required_fields:
-        field_name = field_config['field_name']
-        if not getattr(state, field_name, None):
-            return field_config['question_text']
-    
-    return None
+    """Get next missing required field with checklist rotation logic."""
+    next_question = get_next_checklist_question(state)
+    if next_question:
+        # Extract field name from question to mark it
+        field_configs = get_dynamic_field_configs()
+        for field_config in field_configs:
+            if field_config['question_text'] == next_question:
+                mark_field_asked(state, field_config['field_name'])
+                break
+    return next_question
 
 def is_ready_for_appointment_dynamic(state: ConversationState) -> bool:
     """Check if all required fields are collected based on admin configuration."""
@@ -137,12 +143,91 @@ def mark_phone_prompted(state: ConversationState):
     state.asked_phone_count += 1
     state.last_phone_prompt_turn = state.turn_index
 
+def get_checklist_progress(state: ConversationState) -> Dict[str, bool]:
+    """Get completion status of all checklist items."""
+    return {
+        "name": bool(state.name),
+        "phone": bool(state.phone),
+        "style": bool(state.style),
+        "location": bool(state.location),
+        "scope": bool(state.scope)
+    }
+
+def get_missing_required_fields(state: ConversationState) -> List[str]:
+    """Get list of missing required fields based on priority order."""
+    field_configs = get_dynamic_field_configs()
+    required_fields = [f for f in field_configs if f['is_required']]
+    required_fields.sort(key=lambda x: x['sort_order'])
+    
+    missing = []
+    for field_config in required_fields:
+        field_name = field_config['field_name']
+        if not getattr(state, field_name, None):
+            missing.append(field_name)
+    
+    return missing
+
+def get_next_checklist_question(state: ConversationState, cooldown_turns: int = 2) -> Optional[str]:
+    """Get next question with intelligent rotation and cooldown."""
+    # Get missing required fields
+    missing_fields = get_missing_required_fields(state)
+    if not missing_fields:
+        return None
+    
+    # Apply cooldown - don't ask same field within cooldown period
+    available_fields = []
+    for field in missing_fields:
+        last_ask_turn = state.last_field_ask_turn.get(field, -1)
+        if (state.turn_index - last_ask_turn) >= cooldown_turns:
+            available_fields.append(field)
+    
+    # If no fields available due to cooldown, pick the oldest asked
+    if not available_fields:
+        oldest_field = min(missing_fields, 
+                          key=lambda f: state.last_field_ask_turn.get(f, -1))
+        available_fields = [oldest_field]
+    
+    # Rotate questions - don't ask same field twice in a row
+    if state.last_asked_field in available_fields and len(available_fields) > 1:
+        available_fields = [f for f in available_fields if f != state.last_asked_field]
+    
+    # Pick the field with lowest ask count, or first available
+    next_field = min(available_fields, 
+                    key=lambda f: state.field_ask_counts.get(f, 0))
+    
+    # Get the question text for this field
+    field_configs = get_dynamic_field_configs()
+    for field_config in field_configs:
+        if field_config['field_name'] == next_field:
+            return field_config['question_text']
+    
+    # Fallback to standard questions
+    slot_map = {
+        'name': Slot.NAME, 
+        'phone': Slot.PHONE, 
+        'style': Slot.STYLE, 
+        'location': Slot.LOCATION, 
+        'scope': Slot.SCOPE
+    }
+    return QUESTIONS.get(slot_map.get(next_field))
+
+def mark_field_asked(state: ConversationState, field_name: str):
+    """Mark that a field was asked in this turn."""
+    state.last_asked_field = field_name
+    state.field_ask_counts[field_name] = state.field_ask_counts.get(field_name, 0) + 1
+    state.last_field_ask_turn[field_name] = state.turn_index
+
 def next_missing_after_portfolio(state: ConversationState) -> Optional[str]:
-    """Get next missing field question after portfolio interaction."""
-    if not state.style:    return QUESTIONS[Slot.STYLE]
-    if not state.location: return QUESTIONS[Slot.LOCATION]
-    if not state.phone:    return QUESTIONS[Slot.PHONE]
-    return None
+    """Get next missing field question after portfolio interaction with proper rotation."""
+    next_question = get_next_checklist_question(state)
+    if next_question:
+        # Extract field name from question to mark it
+        field_configs = get_dynamic_field_configs()
+        for field_config in field_configs:
+            if field_config['question_text'] == next_question:
+                mark_field_asked(state, field_config['field_name'])
+                break
+    return next_question
 
 def next_non_phone_slot_question(state: ConversationState) -> Optional[str]:
     """Get next non-phone field question for conversation flow."""

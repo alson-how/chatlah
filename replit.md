@@ -10,17 +10,17 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Changes (August 17, 2025)
 
-✅ **Code Modularization & API Optimization - COMPLETED**:
-- Extracted intent detection logic into dedicated `app/intents.py` module with unified Intent enum and detection functions
-- Created comprehensive `app/slots.py` module for conversation state management and slot progression
-- Modularized conversation controller with clean separation of concerns between intent handling and slot management
-- Enhanced RAG integration with dedicated intent-based response functions
-- Streamlined `app/api.py` by removing duplicated code and improving imports structure
-- Implemented dynamic field configuration integration with admin dashboard settings
-- Added portfolio preview functionality with automatic project examples
-- Enhanced phone ask policy with cooldown mechanism and rotating prompts
-- **TESTING CONFIRMED**: Portfolio queries, multi-field extraction, and conversation routing all working perfectly
-- **PRODUCTION READY**: Clean, maintainable codebase with optimized conversation flow and better developer experience
+✅ **Enhanced Checklist System & Code Modularization - COMPLETED**:
+- **Intelligent Checklist Management**: Implemented comprehensive checklist system that tracks all required fields (name, phone, style, location, budget)
+- **Smart Question Rotation**: Added cooldown mechanism (2-turn minimum) to prevent asking same field repeatedly, with intelligent rotation to different questions
+- **Always Follow-up After Portfolio**: Fixed the issue where chatbot stopped after portfolio response - now always asks next missing field
+- **Progress Tracking**: Enhanced conversation state with field ask counts, last asked tracking, and completion progress monitoring
+- **Modular Architecture**: Extracted intent detection (`app/intents.py`) and slot management (`app/slots.py`) from main API file
+- **RAG Integration with Continuation**: Answers side questions (pricing, process) while maintaining conversation flow to collect missing information
+- **Dynamic Field Configuration**: Integrated with admin dashboard to support customizable required fields and question texts
+- **Enhanced Response Format**: API now returns detailed checklist status, missing fields, and completion progress for better monitoring
+- **TESTING CONFIRMED**: Portfolio responses include follow-up questions, conversation continues until all fields captured, smart question rotation working
+- **PRODUCTION READY**: Robust conversation management ensures no lead information is missed, natural user experience with persistent data collection
 
 ✅ **Complete Admin Dashboard with Dynamic Field Configuration - COMPLETED**:
 - Created comprehensive admin dashboard with PostgreSQL database backend (`admin/admin_database.py`)

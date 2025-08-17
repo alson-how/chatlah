@@ -72,7 +72,8 @@ from app.slots import (
     ConversationState, Slot, QUESTIONS, APPOINTMENT_MESSAGES,
     next_phone_prompt, mark_phone_prompted, next_missing_after_portfolio,
     next_non_phone_slot_question, dynamic_next_slot, is_ready_for_appointment_dynamic,
-    generate_appointment_message, get_slot_question_with_hints
+    generate_appointment_message, get_slot_question_with_hints,
+    get_checklist_progress, get_missing_required_fields, get_dynamic_field_configs
 )
 
 # Enhanced late capture function
@@ -205,12 +206,12 @@ async def enhanced_ask(payload: dict):
         "reply": reply, 
         "state": state.to_dict(),
         "current_slot": state.next_slot().name,
-        "completion_progress": {
-            "name": bool(state.name),
-            "phone": bool(state.phone),
-            "style": bool(state.style),
-            "location": bool(state.location),
-            "scope": bool(state.scope)
+        "completion_progress": get_checklist_progress(state),
+        "missing_fields": get_missing_required_fields(state),
+        "checklist_status": {
+            "total_required": len([f for f in get_dynamic_field_configs() if f['is_required']]),
+            "completed": len([f for f in get_dynamic_field_configs() if f['is_required'] and getattr(state, f['field_name'], None)]),
+            "last_asked": state.last_asked_field
         }
     }
 
