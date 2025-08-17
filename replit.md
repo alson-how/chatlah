@@ -8,12 +8,33 @@ This is a production-ready multi-tenant RAG system with merchant onboarding capa
 
 Preferred communication style: Simple, everyday language.
 
+## Recent Changes (August 17, 2025)
+
+✅ **Optimized Architecture Implementation**: 
+- Implemented modular conversation state management with `ConversationState` class
+- Added centralized conversation controller using `craft_reply()` function
+- Separated concerns into specialized modules:
+  - `app/controller.py`: Main conversation flow logic
+  - `app/late_capture.py`: Information extraction from user messages
+  - `app/rag_assist.py`: RAG-based question answering
+  - `app/optimized_chat.py`: Multi-tenant chat handler
+  - `app/slots.py`: Conversation state definitions
+- Enhanced SESSION management with persistent database storage
+- Improved error handling and conversation flow reliability
+- Maintained backward compatibility with existing Jablanc Interior workflows
+
 ## System Architecture
 
 ### Backend Framework
 - **FastAPI Application**: RESTful API with automatic documentation and CORS middleware
-- **Modular Design**: Clean separation of concerns with dedicated modules for crawling, indexing, retrieval, and API endpoints
+- **Modular Design**: Clean separation of concerns with specialized conversation modules:
+  - `controller.py`: Main conversation flow orchestration
+  - `late_capture.py`: Multi-field information extraction
+  - `rag_assist.py`: Intelligent question answering
+  - `optimized_chat.py`: Multi-tenant conversation management
+  - `slots.py`: Conversation state and field definitions
 - **Exception Handling**: Centralized error handling with structured error responses
+- **Session Management**: ConversationState-based architecture with persistent storage
 
 ### Web Crawling Architecture
 - **Firecrawl Integration**: External API service for intelligent website crawling

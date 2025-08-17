@@ -146,6 +146,20 @@ def update_conversation_session(thread_id: str, merchant_id: int, current_field:
                 updated_at = NOW()
         """, (thread_id, merchant_id, current_field, json.dumps(collected_data), status))
 
+def save_conversation_session(thread_id: str, merchant_id: int, current_field: int, collected_data: Dict, status: str):
+    """Save or update conversation session."""
+    with get_db_cursor() as cursor:
+        cursor.execute("""
+            INSERT INTO conversation_sessions (thread_id, merchant_id, current_field, collected_data, status)
+            VALUES (%s, %s, %s, %s, %s)
+            ON CONFLICT (thread_id) DO UPDATE SET
+                merchant_id = EXCLUDED.merchant_id,
+                current_field = EXCLUDED.current_field,
+                collected_data = EXCLUDED.collected_data,
+                status = EXCLUDED.status,
+                updated_at = NOW()
+        """, (thread_id, merchant_id, current_field, json.dumps(collected_data), status))
+
 # Legacy functions for backward compatibility
 def save_lead(name: str, phone: str, thread_id: str, location: str = "", style_preference: str = ""):
     """Legacy function for backward compatibility."""

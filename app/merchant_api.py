@@ -95,95 +95,27 @@ async def get_merchant_templates():
 
 @router.post("/chat", response_model=ChatResponse)
 async def merchant_chat(request: ChatRequest):
-    """Handle chat with configurable merchant fields."""
+    """Optimized chat handler using modular architecture."""
     
     try:
-        # Get merchant configuration
-        merchant_config = get_merchant_config(request.merchant_id)
-        if not merchant_config:
-            raise HTTPException(status_code=404, detail="Merchant not found")
+        from app.optimized_chat import handle_merchant_chat
+        result = handle_merchant_chat(
+            thread_id=request.thread_id,
+            user_text=request.user_message,
+            merchant_id=request.merchant_id
+        )
         
-        # Get or create conversation session
-        session = get_conversation_session(request.thread_id)
-        if not session:
-            session = {
-                'thread_id': request.thread_id,
-                'merchant_id': request.merchant_id,
-                'current_field': 0,
-                'collected_data': {},
-                'status': 'active'
-            }
+        # Check for errors
+        if "error" in result:
+            raise HTTPException(status_code=500, detail=result["error"])
         
-        # Initialize conversation flow
-        flow = ConversationFlow(merchant_config)
-        
-        # Process user message to extract information
-        extracted_data = flow.process_user_message(request.user_message, session['collected_data'])
-        
-        # Update collected data
-        session['collected_data'].update(extracted_data)
-        
-        # Check if conversation is complete
-        if flow.is_complete(session['collected_data']):
-            # Generate completion message
-            answer = flow.get_completion_message(session['collected_data'])
-            session['status'] = 'complete'
-            
-            # Update session
-            update_conversation_session(
-                request.thread_id, 
-                request.merchant_id,
-                session['current_field'], 
-                session['collected_data'], 
-                'complete'
-            )
-            
-            return ChatResponse(
-                answer=answer,
-                status='complete',
-                collected_data=session['collected_data'],
-                next_field=None
-            )
-        
-        else:
-            # Get next question to ask
-            next_question_info = flow.get_next_question(session['collected_data'])
-            
-            if next_question_info:
-                # Generate greeting if this is first interaction
-                if not any(session['collected_data'].values()):
-                    answer = f"Hi there, this is {merchant_config['name']} from {merchant_config['company']}. {next_question_info['question']}"
-                else:
-                    answer = next_question_info['question']
-                
-                session['current_field'] = next_question_info['field_index']
-                
-                # Update session
-                update_conversation_session(
-                    request.thread_id,
-                    request.merchant_id,
-                    session['current_field'],
-                    session['collected_data'],
-                    'active'
-                )
-                
-                return ChatResponse(
-                    answer=answer,
-                    status='collecting',
-                    collected_data=session['collected_data'],
-                    next_field=next_question_info['field']['field_id']
-                )
-            
-            else:
-                # This shouldn't happen, but handle gracefully
-                answer = "Thank you for the information. Let me review what we have collected."
-                
-                return ChatResponse(
-                    answer=answer,
-                    status='reviewing',
-                    collected_data=session['collected_data'],
-                    next_field=None
-                )
+        return ChatResponse(
+            answer=result["answer"],
+            status=result["status"],
+            collected_data=result["collected_data"],
+            next_field=result["next_field"]
+        )
+
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing chat: {str(e)}")

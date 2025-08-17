@@ -321,7 +321,7 @@ def chat_endpoint(req: ChatRequest):
     user_text = req.user_message
 
     # Extract and store all information from every message
-    name = extract_name(user_text)
+    name, name_score = extract_name(user_text)  # Now returns tuple
     phone = extract_phone(user_text)
     location = extract_location(user_text)
     
@@ -361,8 +361,6 @@ def chat_endpoint(req: ChatRequest):
             save_lead(name=st["name"],
                       phone=st["phone"],
                       thread_id=req.thread_id,
-                      first_message=first_msg,
-                      theme_interest=theme_interest,
                       location=st.get("location", ""),
                       style_preference=st.get("style_preference", ""))
             print(

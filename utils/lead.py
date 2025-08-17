@@ -32,7 +32,7 @@ def extract_name_with_spacy(text: str) -> str:
     
     return ""
 
-def extract_name(text: str) -> str:
+def extract_name(text: str) -> tuple[str, int]:
     """Extract name from user message using both spaCy NER and regex patterns."""
     
     # Skip if text contains location indicators - don't extract names from location responses
@@ -45,7 +45,8 @@ def extract_name(text: str) -> str:
     if nlp:
         spacy_name = extract_name_with_spacy(text)
         if spacy_name:
-            return spacy_name
+            # SpaCy extraction gets high confidence score
+            return spacy_name, 3
     
     # Fallback to regex patterns for specific formats
     # Pattern: "my name is [name]" or "i'm [name]" or "i am [name]" or "[name] here"
@@ -71,9 +72,12 @@ def extract_name(text: str) -> str:
                         break
                     clean_words.append(word)
                 if clean_words:
-                    return ' '.join(clean_words)
+                    name = ' '.join(clean_words)
+                    # Score based on confidence
+                    score = 3 if len(clean_words) >= 2 else 2
+                    return name, score
     
-    return ""
+    return "", 0
 
 def extract_phone(text: str) -> str:
     """Extract phone number from user message."""
@@ -101,7 +105,7 @@ def is_lead_only(text: str) -> bool:
     text = text.lower().strip()
     
     # If it contains name or phone patterns but no other meaningful content
-    has_name = bool(extract_name(text))
+    has_name = bool(extract_name(text)[0])  # extract_name now returns tuple
     has_phone = bool(extract_phone(text))
     
     if not (has_name or has_phone):
