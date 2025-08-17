@@ -567,6 +567,29 @@ def chat_endpoint(req: ChatRequest):
         except Exception as e:
             print(f"Error saving lead: {e}")
 
+    # Enhanced intent detection with optimized portfolio handling
+    from app.intents import detect_intent, respond_with_intent, Intent
+    from app.slots import ConversationState
+    
+    # Create conversation state from session data
+    conv_state = ConversationState(user_id=req.thread_id)
+    conv_state.name = st.get("name")
+    conv_state.phone = st.get("phone")  
+    conv_state.location = st.get("location")
+    conv_state.style = st.get("style_theme")
+    conv_state.turn_index = len(st.get("turns", [])) + 1
+    
+    # Detect intent and respond with optimized handlers
+    intent = detect_intent(req.user_message)
+    if intent != Intent.NONE:
+        intent_reply = respond_with_intent(intent, req.user_message, conv_state, req.portfolio_url)
+        if intent_reply:
+            st["turns"].append(("user", req.user_message))
+            st["turns"].append(("assistant", intent_reply))
+            st["summary"] = summarise(st["summary"], req.user_message, intent_reply)
+            st["first_turn"] = False
+            return ChatResponse(answer=intent_reply, sources=[])
+
     # Dynamic conversation flow - only end when we have ALL required info
     if is_conversation_complete(st):
         final_name = st.get("name", "there")
