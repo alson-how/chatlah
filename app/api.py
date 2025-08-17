@@ -63,157 +63,17 @@ CHAT_SESSIONS = {
 # Enhanced Conversation Management Configuration
 PORTFOLIO_URL = "https://jablancinteriors.com/projects/"
 
-# Short RAG answer triggers - enhanced with more patterns
-INFO_TRIGGERS = (
-    "do you", "can you", "how", "what", "price", "cost", "timeline", "lead time",
-    "revision", "portfolio", "past project", "projects", "process", "services",
-    "warranty", "quotation", "quote", "examples", "sample", "consultation"
+# Import modularized components
+from app.intents import (
+    detect_intent, Intent, is_portfolio_intent, is_generic_id_intent, 
+    rag_answer_one_liner, portfolio_preview, respond_with_intent
 )
-
-# Rotating phone prompts for natural variation
-PHONE_PROMPTS = [
-    "What's the best phone number to reach you?",
-    "Could you share a contact number so I can follow up properly?",
-    "Mind sharing your phone number? I'll WhatsApp you the next steps.",
-]
-
-# Enhanced slot-driven conversation model
-class Slot(Enum):
-    NAME = auto()
-    PHONE = auto()
-    STYLE = auto()
-    LOCATION = auto()
-    SCOPE = auto()
-    NONE = auto()
-
-QUESTIONS: Dict[Slot, str] = {
-    Slot.NAME:     "May I have your name?",
-    Slot.PHONE:    "What's the best phone number to reach you?",
-    Slot.STYLE:    "What kind of style or vibe you want?",
-    Slot.LOCATION: "Which area is the property located?",
-    Slot.SCOPE:    "Which spaces are in scope? For example, living, kitchen, master bedroom."
-}
-
-# Appointment scheduling messages
-APPOINTMENT_MESSAGES = [
-    "Perfect! I have your details - {name}, {phone}, {style} style in {location}.",
-    "Let me schedule a consultation for you. When would be a good time this week?",
-    "I can arrange a site visit - would morning or afternoon work better?",
-    "Our designer will contact you within 24 hours to arrange a meeting.",
-    "Would you prefer a weekday or weekend appointment for the consultation?"
-]
-
-@dataclass
-class ConversationState:
-    user_id: str
-    lead_id: Optional[str] = None
-    name: Optional[str] = None
-    phone: Optional[str] = None
-    style: Optional[str] = None
-    location: Optional[str] = None
-    scope: Optional[str] = None
-    
-    # Enhanced phone ask control
-    asked_phone_count: int = 0
-    last_phone_prompt_turn: int = -1
-    
-    # Generic control
-    asked_name_phone_once: bool = False
-    turn_index: int = 0
-    
-    def next_slot(self) -> Slot:
-        if not self.name:     return Slot.NAME
-        if not self.phone:    return Slot.PHONE
-        if not self.style:    return Slot.STYLE
-        if not self.location: return Slot.LOCATION
-        if not self.scope:    return Slot.SCOPE
-        return Slot.NONE
-    
-    def is_ready_for_appointment(self) -> bool:
-        """Check if we have minimum required info for appointment booking."""
-        return bool(self.name and self.phone and self.style and self.location)
-    
-    def to_dict(self): 
-        return asdict(self)
-
-# Enhanced intent detection
-PORTFOLIO_TRIGGERS = (
-    "portfolio", "past project", "past projects", "projects",
-    "work examples", "your work", "case study", "case studies", 
-    "references", "gallery", "showroom", "examples", "sample", "samples"
+from app.slots import (
+    ConversationState, Slot, QUESTIONS, APPOINTMENT_MESSAGES,
+    next_phone_prompt, mark_phone_prompted, next_missing_after_portfolio,
+    next_non_phone_slot_question, dynamic_next_slot, is_ready_for_appointment_dynamic,
+    generate_appointment_message, get_slot_question_with_hints
 )
-
-def is_portfolio_intent(text: str) -> bool:
-    t = (text or "").lower()
-    return any(k in t for k in PORTFOLIO_TRIGGERS)
-
-def is_generic_id_intent(text: str) -> bool:
-    return bool(re.search(r"\b(id|interior design|renovation|makeover|concept)\b", (text or ""), re.I))
-
-# Enhanced RAG helpers with portfolio preview
-def rag_answer_one_liner(user_text: str, max_chars: int = 220) -> Optional[str]:
-    """Answer side-questions briefly using RAG (1 sentence + 1 source)."""
-    t = (user_text or "").lower()
-    if not any(k in t for k in INFO_TRIGGERS):
-        return None
-    hits = search(user_text, top_k=2) or []
-    if not hits:
-        return None
-    h = hits[0]
-    url = h["meta"].get("url", "")
-    snippet = (h["text"] or "").strip()
-    if len(snippet) > max_chars:
-        snippet = snippet[:max_chars].rsplit(" ", 1)[0] + "..."
-    return f"{snippet} (Source: {url})"
-
-def portfolio_preview(max_items: int = 3) -> Optional[str]:
-    """Show 1–3 project examples from portfolio."""
-    hits = search("portfolio projects interior design examples", top_k=max_items) or []
-    if not hits:
-        return None
-    items = []
-    for h in hits:
-        title = (h["meta"].get("title") or "").strip()
-        url = h["meta"].get("url") or ""
-        if title and url:
-            items.append(f"{title} ({url})")
-        elif url:
-            items.append(url)
-        if len(items) >= max_items:
-            break
-    return "Examples: " + "; ".join(items) if items else None
-
-# Enhanced phone ask policy with cooldown and rotations
-def next_phone_prompt(state: ConversationState) -> Optional[str]:
-    # Cooldown: don't repeat within 2 turns
-    if state.asked_phone_count > 0 and (state.turn_index - state.last_phone_prompt_turn) < 2:
-        return None
-    # Stop after 3 attempts; keep progressing other slots
-    if state.asked_phone_count >= 3:
-        return None
-    variant = PHONE_PROMPTS[state.asked_phone_count % len(PHONE_PROMPTS)]
-    if state.name:
-        variant = f"Thanks, {state.name}. {variant}"
-    return variant
-
-def mark_phone_prompted(state: ConversationState):
-    state.asked_phone_count += 1
-    state.last_phone_prompt_turn = state.turn_index
-
-# Enhanced follow-up question helpers
-def next_missing_after_portfolio(state: ConversationState) -> Optional[str]:
-    """Get next missing field question after portfolio interaction."""
-    if not state.style:    return QUESTIONS[Slot.STYLE]
-    if not state.location: return QUESTIONS[Slot.LOCATION]
-    if not state.phone:    return QUESTIONS[Slot.PHONE]
-    return None
-
-def next_non_phone_slot_question(state: ConversationState) -> Optional[str]:
-    """Get next non-phone field question for conversation flow."""
-    if not state.style:    return QUESTIONS[Slot.STYLE]
-    if not state.location: return QUESTIONS[Slot.LOCATION]
-    if not state.scope:    return QUESTIONS[Slot.SCOPE]
-    return None
 
 # Enhanced late capture function
 def enhanced_late_capture(user_text: str, state: ConversationState) -> None:
@@ -248,47 +108,6 @@ def enhanced_late_capture(user_text: str, state: ConversationState) -> None:
 # Core enhanced controller
 REASK_PREFIX = "Just to confirm,"
 
-def get_dynamic_field_configs():
-    """Get field configurations from admin settings."""
-    try:
-        from admin.admin_database import get_active_field_configs
-        return get_active_field_configs()
-    except Exception as e:
-        print(f"Error loading field configs: {e}")
-        # Fallback to default configuration
-        return [
-            {'field_name': 'name', 'question_text': 'May I have your name?', 'is_required': True, 'sort_order': 1},
-            {'field_name': 'phone', 'question_text': 'What\'s the best phone number to reach you?', 'is_required': True, 'sort_order': 2},
-            {'field_name': 'style', 'question_text': 'What kind of style or vibe you want?', 'is_required': True, 'sort_order': 3},
-            {'field_name': 'location', 'question_text': 'Which area is the property located?', 'is_required': True, 'sort_order': 4},
-            {'field_name': 'scope', 'question_text': 'Which spaces are in scope? For example, living, kitchen, master bedroom.', 'is_required': False, 'sort_order': 5}
-        ]
-
-def dynamic_next_slot(state: ConversationState) -> Optional[str]:
-    """Get next missing required field based on admin configuration."""
-    field_configs = get_dynamic_field_configs()
-    required_fields = [f for f in field_configs if f['is_required']]
-    required_fields.sort(key=lambda x: x['sort_order'])
-    
-    for field_config in required_fields:
-        field_name = field_config['field_name']
-        if not getattr(state, field_name, None):
-            return field_config['question_text']
-    
-    return None
-
-def is_ready_for_appointment_dynamic(state: ConversationState) -> bool:
-    """Check if all required fields are collected based on admin configuration."""
-    field_configs = get_dynamic_field_configs()
-    required_fields = [f for f in field_configs if f['is_required']]
-    
-    for field_config in required_fields:
-        field_name = field_config['field_name']
-        if not getattr(state, field_name, None):
-            return False
-    
-    return True
-
 def enhanced_handle_turn(user_text: str, state: ConversationState) -> str:
     """Enhanced slot-driven conversation handler with RAG integration and appointment scheduling."""
     state.turn_index += 1
@@ -298,23 +117,13 @@ def enhanced_handle_turn(user_text: str, state: ConversationState) -> str:
 
     # 2) Check if ready for appointment after capture using dynamic config
     if is_ready_for_appointment_dynamic(state):
-        # We have all required fields - proceed to appointment
-        import random
-        appointment_msg = random.choice(APPOINTMENT_MESSAGES)
-        return appointment_msg.format(
-            name=state.name or 'there',
-            phone=state.phone or 'your contact',
-            style=getattr(state, 'style', 'your preferred style') or 'your preferred style',
-            location=getattr(state, 'location', 'your location') or 'your location'
-        )
+        return generate_appointment_message(state)
 
-    # 3) High-priority: Portfolio intent (always answer first)
-    if is_portfolio_intent(user_text):
-        preview = portfolio_preview()
-        head = f"Yes sure, you may look at our portfolio here {PORTFOLIO_URL}."
-        body = f"\n{preview}" if preview else ""
-        follow = next_missing_after_portfolio(state)
-        return (head + body + (f"\n{follow}" if follow else "")).strip()
+    # 3) Intent-first response with built-in follow-up
+    intent = detect_intent(user_text)
+    intent_reply = respond_with_intent(intent, user_text, state, PORTFOLIO_URL)
+    if intent_reply:
+        return intent_reply
 
     # 4) Determine current slot
     slot = state.next_slot()
@@ -330,14 +139,7 @@ def enhanced_handle_turn(user_text: str, state: ConversationState) -> str:
     if not next_question:
         # Check for appointment readiness after slot progression
         if is_ready_for_appointment_dynamic(state):
-            import random
-            appointment_msg = random.choice(APPOINTMENT_MESSAGES)
-            return appointment_msg.format(
-                name=state.name or 'there',
-                phone=state.phone or 'your contact',
-                style=getattr(state, 'style', 'your preferred style') or 'your preferred style',
-                location=getattr(state, 'location', 'your location') or 'your location'
-            )
+            return generate_appointment_message(state)
         
         # Optional: if style was just captured, send matching project link
         if hasattr(state, 'style') and state.style and mentions_theme(user_text):
@@ -347,17 +149,13 @@ def enhanced_handle_turn(user_text: str, state: ConversationState) -> str:
         
         return "Thank you for providing all the information! Our team will be in touch soon."
     
-    # If there's a next question to ask, check if it's different from what we would have asked before
-    if next_question and next_question != QUESTIONS.get(slot, ""):
+    # If there's a next question to ask, return it
+    if next_question:
         return next_question
 
     # 7) Enhanced off-topic handling with smart phone policy
     rag_line = rag_answer_one_liner(user_text)
-    hint = ""
-    if slot == Slot.STYLE:    hint = " For example, modern minimalist, warm neutral, or industrial."
-    if slot == Slot.LOCATION: hint = " For example, Mont Kiara, Bangsar, or Penang."
-    if slot == Slot.SCOPE:    hint = " For example, living and kitchen."
-    question = QUESTIONS[slot] + hint
+    question = get_slot_question_with_hints(slot)
 
     if slot == Slot.PHONE and not state.phone:
         phone_prompt = next_phone_prompt(state)

@@ -10,17 +10,17 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Changes (August 17, 2025)
 
-✅ **API Optimization with Enhanced Conversation Controller - COMPLETED**:
-- Streamlined conversation flow with improved intent detection and response patterns
-- Enhanced phone ask policy with cooldown mechanism (2-turn minimum) and rotating prompts to prevent loops
-- Optimized late capture function for better field extraction from user messages
-- Added portfolio preview functionality with automatic project examples
+✅ **Code Modularization & API Optimization - COMPLETED**:
+- Extracted intent detection logic into dedicated `app/intents.py` module with unified Intent enum and detection functions
+- Created comprehensive `app/slots.py` module for conversation state management and slot progression
+- Modularized conversation controller with clean separation of concerns between intent handling and slot management
+- Enhanced RAG integration with dedicated intent-based response functions
+- Streamlined `app/api.py` by removing duplicated code and improving imports structure
 - Implemented dynamic field configuration integration with admin dashboard settings
-- Enhanced RAG integration with one-liner responses for side questions
-- Improved appointment scheduling logic with automatic progression when all required fields collected
-- Simplified controller architecture following WhatsApp sales agent best practices
-- **TESTING CONFIRMED**: Optimized conversation flow, better user experience, efficient field collection
-- **PRODUCTION READY**: Enhanced system provides natural conversational experience with reduced repetition
+- Added portfolio preview functionality with automatic project examples
+- Enhanced phone ask policy with cooldown mechanism and rotating prompts
+- **TESTING CONFIRMED**: Portfolio queries, multi-field extraction, and conversation routing all working perfectly
+- **PRODUCTION READY**: Clean, maintainable codebase with optimized conversation flow and better developer experience
 
 ✅ **Complete Admin Dashboard with Dynamic Field Configuration - COMPLETED**:
 - Created comprehensive admin dashboard with PostgreSQL database backend (`admin/admin_database.py`)
