@@ -95,7 +95,8 @@ def handle_portfolio_intent(
 
     # Generate intelligent follow-up based on missing information and context
     follow_up = get_intelligent_portfolio_followup(text, state)
-    print(follow_up)
+    print(follow_up)  # Line 98: This prints the follow-up question to console
+    
     response = (head + body).strip()
     if follow_up:
         response += f"\n{follow_up}"
