@@ -90,6 +90,15 @@ SLOT_QUESTIONS: Dict[Slot, str] = {
     Slot.SCOPE:    "Which spaces are in scope? For example, living, kitchen, master bedroom."
 }
 
+# Appointment scheduling messages
+APPOINTMENT_MESSAGES = [
+    "Perfect! I have your details - {name}, {phone}, {style} style in {location}.",
+    "Let me schedule a consultation for you. When would be a good time this week?",
+    "I can arrange a site visit - would morning or afternoon work better?",
+    "Our designer will contact you within 24 hours to arrange a meeting.",
+    "Would you prefer a weekday or weekend appointment for the consultation?"
+]
+
 @dataclass
 class EnhancedConversationState:
     user_id: str
@@ -115,6 +124,10 @@ class EnhancedConversationState:
         if not self.location: return Slot.LOCATION
         if not self.scope:    return Slot.SCOPE
         return Slot.NONE
+    
+    def is_ready_for_appointment(self) -> bool:
+        """Check if we have minimum required info for appointment booking."""
+        return bool(self.name and self.phone and self.style and self.location)
     
     def to_dict(self): 
         return asdict(self)
@@ -248,13 +261,25 @@ def enhanced_late_capture(user_text: str, state: EnhancedConversationState) -> N
 REASK_PREFIX = "Just to confirm,"
 
 def enhanced_handle_turn(user_text: str, state: EnhancedConversationState) -> str:
-    """Enhanced slot-driven conversation handler with RAG integration."""
+    """Enhanced slot-driven conversation handler with RAG integration and appointment scheduling."""
     state.turn_index += 1
 
     # 1) Late-capture anything provided this turn
     enhanced_late_capture(user_text, state)
 
-    # 2) High-priority: Portfolio intent (always answer first)
+    # 2) Check if ready for appointment after capture
+    if state.is_ready_for_appointment() and state.next_slot() == Slot.SCOPE:
+        # We have name, phone, style, location - proceed to appointment
+        import random
+        appointment_msg = random.choice(APPOINTMENT_MESSAGES)
+        return appointment_msg.format(
+            name=state.name,
+            phone=state.phone,
+            style=state.style,
+            location=state.location
+        )
+
+    # 3) High-priority: Portfolio intent (always answer first)
     if is_portfolio_intent(user_text):
         preview = portfolio_preview()
         head = f"Yes sure, you may look at our portfolio here {PORTFOLIO_URL}."
@@ -262,18 +287,29 @@ def enhanced_handle_turn(user_text: str, state: EnhancedConversationState) -> st
         follow = next_missing_after_portfolio(state)
         return (head + body + (f"\n{follow}" if follow else "")).strip()
 
-    # 3) Determine current slot
+    # 4) Determine current slot
     slot = state.next_slot()
 
-    # 4) If user expressed generic ID intent but we're still missing style, probe style first
+    # 5) If user expressed generic ID intent but we're still missing style, probe style first
     if slot in (Slot.NAME, Slot.PHONE) and is_generic_id_intent(user_text) and not state.style:
         rag_line = rag_answer_one_liner(user_text) or ""
         style_probe = SLOT_QUESTIONS[Slot.STYLE]
         return (rag_line + ("\n" if rag_line else "") + style_probe).strip()
 
-    # 5) Check if user answered current slot this turn
+    # 6) Check if user answered current slot this turn
     new_slot = state.next_slot()
     if new_slot != slot:
+        # Check for appointment readiness after slot progression
+        if state.is_ready_for_appointment():
+            import random
+            appointment_msg = random.choice(APPOINTMENT_MESSAGES)
+            return appointment_msg.format(
+                name=state.name,
+                phone=state.phone,
+                style=state.style,
+                location=state.location
+            )
+        
         # Optional: if style was just captured, send matching project link
         if new_slot == Slot.LOCATION and mentions_theme(user_text):
             link = resolve_theme_url(user_text)
@@ -281,7 +317,7 @@ def enhanced_handle_turn(user_text: str, state: EnhancedConversationState) -> st
                 return f"Sure—here's one project that fits: {link}\n{SLOT_QUESTIONS[new_slot]}"
         return SLOT_QUESTIONS[new_slot]
 
-    # 6) Enhanced off-topic handling with smart phone policy
+    # 7) Enhanced off-topic handling with smart phone policy
     rag_line = rag_answer_one_liner(user_text)
     hint = ""
     if slot == Slot.STYLE:    hint = " For example, modern minimalist, warm neutral, or industrial."
