@@ -619,12 +619,17 @@ def chat_endpoint(req: ChatRequest):
         
         # Attempt to schedule appointment automatically
         from app.calendar_integration import schedule_appointment_for_lead
+        from app.database import get_merchant_google_tokens
+        
+        # Get merchant's Google Calendar tokens (default merchant for now)
+        merchant_tokens = get_merchant_google_tokens("default")
         
         appointment_result = schedule_appointment_for_lead(
             name=st.get("name"),
             phone=st.get("phone"),
             location=st.get("location"),
-            style=st.get("style_preference")
+            style=st.get("style_preference"),
+            merchant_tokens=merchant_tokens
         )
         
         if appointment_result['success']:

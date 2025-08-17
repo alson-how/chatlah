@@ -1,6 +1,6 @@
 """
 Google Calendar integration for automated appointment scheduling.
-Handles calendar authentication, availability checking, and appointment creation.
+Handles OAuth2 authentication, availability checking, and appointment creation.
 """
 
 import os
@@ -9,42 +9,103 @@ from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
 from google.oauth2.credentials import Credentials
 from google.auth.transport.requests import Request
-from google_auth_oauthlib.flow import InstalledAppFlow
+from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+from urllib.parse import urlencode
 
 # Google Calendar API scopes
 SCOPES = ['https://www.googleapis.com/auth/calendar']
 
+# OAuth2 credentials - these will be provided by the user
+GOOGLE_CLIENT_ID = os.getenv('GOOGLE_OAUTH_CLIENT_ID')
+GOOGLE_CLIENT_SECRET = os.getenv('GOOGLE_OAUTH_CLIENT_SECRET')
+
 class GoogleCalendarManager:
-    def __init__(self):
+    def __init__(self, user_credentials: Optional[str] = None):
         self.service = None
         self.calendar_id = 'primary'  # Use primary calendar
+        self.user_credentials = user_credentials
         
-    def authenticate(self) -> bool:
-        """Authenticate with Google Calendar API using service account or OAuth."""
+    def get_auth_url(self, state: str = None) -> str:
+        """Generate Google OAuth2 authorization URL for user to sign in."""
+        if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
+            raise ValueError("Google OAuth credentials not configured")
+            
+        # Use the current domain from environment
+        domain = os.getenv('REPLIT_DEV_DOMAIN', 'localhost:5000')
+        redirect_uri = f'https://{domain}/api/appointments/oauth/callback'
+        
+        flow = Flow.from_client_config({
+            "web": {
+                "client_id": GOOGLE_CLIENT_ID,
+                "client_secret": GOOGLE_CLIENT_SECRET,
+                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                "token_uri": "https://oauth2.googleapis.com/token",
+                "redirect_uris": [redirect_uri]
+            }
+        }, scopes=SCOPES)
+        
+        flow.redirect_uri = redirect_uri
+        
+        auth_url, _ = flow.authorization_url(
+            access_type='offline',
+            include_granted_scopes='true',
+            state=state
+        )
+        
+        return auth_url
+    
+    def exchange_code_for_tokens(self, code: str) -> Dict[str, Any]:
+        """Exchange authorization code for access tokens."""
+        if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
+            raise ValueError("Google OAuth credentials not configured")
+            
+        domain = os.getenv('REPLIT_DEV_DOMAIN', 'localhost:5000')
+        redirect_uri = f'https://{domain}/api/appointments/oauth/callback'
+        
+        flow = Flow.from_client_config({
+            "web": {
+                "client_id": GOOGLE_CLIENT_ID,
+                "client_secret": GOOGLE_CLIENT_SECRET,
+                "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                "token_uri": "https://oauth2.googleapis.com/token",
+                "redirect_uris": [redirect_uri]
+            }
+        }, scopes=SCOPES)
+        
+        flow.redirect_uri = redirect_uri
+        flow.fetch_token(code=code)
+        
+        credentials = flow.credentials
+        return {
+            'access_token': credentials.token,
+            'refresh_token': credentials.refresh_token,
+            'token_uri': credentials.token_uri,
+            'client_id': credentials.client_id,
+            'client_secret': credentials.client_secret,
+            'scopes': credentials.scopes
+        }
+    
+    def authenticate_with_tokens(self, token_data: Dict[str, Any]) -> bool:
+        """Authenticate with stored user tokens."""
         try:
-            # Try to load existing credentials
-            creds = None
+            credentials = Credentials(
+                token=token_data['access_token'],
+                refresh_token=token_data.get('refresh_token'),
+                token_uri=token_data.get('token_uri'),
+                client_id=token_data.get('client_id'),
+                client_secret=token_data.get('client_secret'),
+                scopes=token_data.get('scopes')
+            )
             
-            # Check for service account key from environment
-            service_account_info = os.getenv('GOOGLE_SERVICE_ACCOUNT_JSON')
-            if service_account_info:
-                from google.oauth2 import service_account
-                service_account_data = json.loads(service_account_info)
-                creds = service_account.Credentials.from_service_account_info(
-                    service_account_data, scopes=SCOPES
-                )
-            else:
-                # Fallback to OAuth flow (requires user interaction)
-                # In production, this should be pre-configured
-                print("WARNING: No service account found. Calendar integration requires Google credentials.")
-                return False
+            # Refresh token if expired
+            if credentials.expired and credentials.refresh_token:
+                credentials.refresh(Request())
             
-            if creds:
-                self.service = build('calendar', 'v3', credentials=creds)
-                return True
-                
+            self.service = build('calendar', 'v3', credentials=credentials)
+            return True
+            
         except Exception as e:
             print(f"Calendar authentication failed: {e}")
             return False
@@ -188,19 +249,29 @@ This is an automated booking from the Jablanc Interior chat system.
         return available_slots[0] if available_slots else None
 
 
-def schedule_appointment_for_lead(name: str, phone: str, location: str, style: str) -> Dict[str, Any]:
+def schedule_appointment_for_lead(name: str, phone: str, location: str, style: str, 
+                                merchant_tokens: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """
     Schedule an appointment for a lead with complete information.
     Returns appointment details or error message.
     """
-    calendar_manager = GoogleCalendarManager()
-    
-    # Try to authenticate
-    if not calendar_manager.authenticate():
+    if not merchant_tokens:
         return {
             'success': False,
-            'message': 'Calendar service not available. Please contact us directly to schedule your appointment.',
+            'auth_required': True,
+            'message': 'Calendar integration requires Google account connection.',
             'fallback_message': f"Hi {name}, thank you for providing all your details. We'll contact you at {phone} within 24 hours to schedule your consultation for your {style} project in {location}."
+        }
+    
+    calendar_manager = GoogleCalendarManager()
+    
+    # Try to authenticate with merchant's tokens
+    if not calendar_manager.authenticate_with_tokens(merchant_tokens):
+        return {
+            'success': False,
+            'auth_required': True,
+            'message': 'Calendar authentication expired. Please reconnect your Google account.',
+            'fallback_message': f"Hi {name}, we'll contact you at {phone} within 24 hours to schedule your consultation."
         }
     
     # Get next available slot
@@ -241,11 +312,11 @@ def schedule_appointment_for_lead(name: str, phone: str, location: str, style: s
         }
 
 
-def get_available_appointment_slots(days_ahead: int = 7) -> List[Dict[str, Any]]:
+def get_available_appointment_slots(merchant_tokens: Dict[str, Any], days_ahead: int = 7) -> List[Dict[str, Any]]:
     """Get list of available appointment slots for user selection."""
     calendar_manager = GoogleCalendarManager()
     
-    if not calendar_manager.authenticate():
+    if not calendar_manager.authenticate_with_tokens(merchant_tokens):
         return []
     
     return calendar_manager.get_available_slots(days_ahead=days_ahead)

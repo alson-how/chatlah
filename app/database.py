@@ -71,6 +71,16 @@ def init_merchant_tables():
                 updated_at TIMESTAMP DEFAULT NOW()
             )
         """)
+        
+        # Google tokens table for calendar integration
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS merchant_google_tokens (
+                merchant_id VARCHAR(255) PRIMARY KEY,
+                tokens JSONB NOT NULL,
+                created_at TIMESTAMP DEFAULT NOW(),
+                updated_at TIMESTAMP DEFAULT NOW()
+            )
+        """)
 
 def create_merchant(name: str, company: str, fields_config: List[Dict], tone: str = 'professional') -> int:
     """Create a new merchant with custom field configuration."""
@@ -171,6 +181,40 @@ def save_lead(name: str, phone: str, thread_id: str, location: str = "", style_p
         'style_preference': style_preference
     }
     save_consumer_data(1, thread_id, data, 'complete')
+
+def save_merchant_google_tokens(merchant_id: str, tokens: dict):
+    """Save Google OAuth tokens for a merchant."""
+    from datetime import datetime
+    with get_db_cursor() as cursor:
+        cursor.execute("""
+            INSERT INTO merchant_google_tokens (merchant_id, tokens, created_at, updated_at)
+            VALUES (%s, %s, %s, %s)
+            ON CONFLICT (merchant_id) 
+            DO UPDATE SET tokens = %s, updated_at = %s
+        """, (
+            merchant_id, 
+            json.dumps(tokens), 
+            datetime.now(), 
+            datetime.now(),
+            json.dumps(tokens), 
+            datetime.now()
+        ))
+        print(f"✅ SAVED GOOGLE TOKENS for merchant: {merchant_id}")
+
+def get_merchant_google_tokens(merchant_id: str) -> Optional[dict]:
+    """Get Google OAuth tokens for a merchant."""
+    with get_db_cursor() as cursor:
+        cursor.execute("SELECT tokens FROM merchant_google_tokens WHERE merchant_id = %s", (merchant_id,))
+        result = cursor.fetchone()
+        if result:
+            return json.loads(result[0])
+        return None
+
+def delete_merchant_google_tokens(merchant_id: str):
+    """Delete Google OAuth tokens for a merchant."""
+    with get_db_cursor() as cursor:
+        cursor.execute("DELETE FROM merchant_google_tokens WHERE merchant_id = %s", (merchant_id,))
+        print(f"✅ DELETED GOOGLE TOKENS for merchant: {merchant_id}")
 
 def get_lead(thread_id: str) -> Optional[Dict]:
     """Legacy function for backward compatibility."""

@@ -41,6 +41,11 @@ async def admin_fields_page(request: Request):
         "field_configs": field_configs
     })
 
+@router.get("/admin/calendar", response_class=HTMLResponse)
+async def admin_calendar_page(request: Request):
+    """Admin page for Google Calendar integration setup."""
+    return templates.TemplateResponse("admin_calendar.html", {"request": request})
+
 @router.get("/admin/api/fields")
 async def get_field_configs():
     """API endpoint to get all field configurations."""
