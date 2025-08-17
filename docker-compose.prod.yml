@@ -1,0 +1,71 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    ports:
+      - "5000:5000"
+    environment:
+      # Database configuration - set these in your environment
+      - DATABASE_URL=${DATABASE_URL}
+      - PGHOST=${PGHOST}
+      - PGPORT=${PGPORT:-5432}
+      - PGUSER=${PGUSER}
+      - PGPASSWORD=${PGPASSWORD}
+      - PGDATABASE=${PGDATABASE}
+      
+      # API Keys - MUST be set in production
+      - FIRECRAWL_API_KEY=${FIRECRAWL_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      
+      # Google OAuth for Calendar Integration (optional)
+      - GOOGLE_OAUTH_CLIENT_ID=${GOOGLE_OAUTH_CLIENT_ID}
+      - GOOGLE_OAUTH_CLIENT_SECRET=${GOOGLE_OAUTH_CLIENT_SECRET}
+      
+      # Domain configuration
+      - DOMAIN=${DOMAIN:-localhost:5000}
+      - REPLIT_DEV_DOMAIN=${DOMAIN:-localhost:5000}
+      
+      # Security
+      - FLASK_SECRET_KEY=${FLASK_SECRET_KEY:-change-this-in-production}
+    volumes:
+      - chroma_data:/app/data/chroma
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 512M
+
+  # Optional: Include PostgreSQL if not using managed database
+  # Uncomment the following section if you want to run PostgreSQL locally
+  # 
+  # db:
+  #   image: postgres:15-alpine
+  #   environment:
+  #     - POSTGRES_DB=${PGDATABASE:-ragdb}
+  #     - POSTGRES_USER=${PGUSER:-postgres}
+  #     - POSTGRES_PASSWORD=${PGPASSWORD}
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   ports:
+  #     - "5432:5432"
+  #   restart: unless-stopped
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U ${PGUSER:-postgres}"]
+  #     interval: 30s
+  #     timeout: 10s
+  #     retries: 3
+
+volumes:
+  chroma_data:
+    driver: local
+  # postgres_data:
+  #   driver: local

@@ -89,3 +89,22 @@ Preferred communication style: Simple, everyday language.
 
 ### Database Management
 - **psycopg2-binary**: PostgreSQL adapter for Python.
+
+## Docker Deployment
+
+### Container Configuration
+- **Dockerfile**: Multi-stage build with Python 3.11-slim base image.
+- **Health Checks**: Built-in health monitoring at `/health` endpoint.
+- **Security**: Non-root user configuration and optimized dependencies.
+- **Performance**: UV package manager for faster installs and production optimizations.
+
+### Deployment Options
+- **Development**: `docker-compose.yml` with local PostgreSQL database.
+- **Production**: `docker-compose.prod.yml` for external managed database deployment.
+- **Digital Ocean**: Comprehensive deployment guide with App Platform and Droplet instructions.
+
+### Required Environment Variables
+- Database: `DATABASE_URL`, `PGHOST`, `PGPORT`, `PGUSER`, `PGPASSWORD`, `PGDATABASE`
+- APIs: `FIRECRAWL_API_KEY`, `OPENAI_API_KEY`
+- OAuth: `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`
+- Domain: `DOMAIN`, `REPLIT_DEV_DOMAIN`
