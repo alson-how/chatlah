@@ -215,13 +215,31 @@ def _try_alias_lookup(candidate: str) -> Optional[str]:
 
 def _extract_building_like(text_norm: str) -> Optional[str]:
     # Search patterns like "Park Regent Residence", "The Arcuz Condominium"
+    # But avoid false matches like "looking for ID for my condo"
     for suf in RESIDENCE_SUFFIXES:
         pat = re.compile(rf"\b([a-z][a-z '\-]{{2,40}})\s+{re.escape(suf)}\b", re.I)
         m = pat.search(text_norm)
         if m:
-            name = (m.group(0)).strip()
+            full_match = m.group(0).strip()
+            building_part = m.group(1).strip()
+            
+            # Filter out false matches that contain action words or are too generic
+            false_indicators = [
+                "looking for", "want", "need", "find", "search", "get", "have",
+                "id for", "interior design for", "design for", "for my", "for our", "for the"
+            ]
+            
+            # Check if any false indicator appears in the building part
+            building_lower = building_part.lower()
+            full_text_lower = text_norm.lower()
+            
+            # Skip if building part contains action phrases or if this appears to be a service request
+            if (any(indicator in building_lower for indicator in false_indicators) or
+                any(phrase in full_text_lower for phrase in ["looking for", "want", "need", "find"])):
+                continue
+                
             # Title case nicely
-            return " ".join(w.capitalize() for w in name.split())
+            return " ".join(w.capitalize() for w in full_match.split())
     return None
 
 def extract_location(text: str) -> Optional[str]:

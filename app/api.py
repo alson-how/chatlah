@@ -76,6 +76,35 @@ from app.slots import (
     get_checklist_progress, get_missing_required_fields, get_dynamic_field_configs
 )
 
+def extract_budget(text: str) -> Optional[str]:
+    """Extract budget information from user text."""
+    text_lower = text.lower()
+    
+    # Budget patterns: number + k, number + thousand, rm + number, etc.
+    budget_patterns = [
+        r'\b(\d+[,.]?\d*)\s*k\b',  # 50k, 100k
+        r'\b(\d+[,.]?\d*)\s*thousand\b',  # 50 thousand
+        r'\brm\s*(\d+[,.]?\d*)\s*k?\b',  # rm 50k, rm 100
+        r'\b(\d+[,.]?\d*)\s*budget\b',  # 50k budget
+        r'\ballocated?\s*(\d+[,.]?\d*)\s*k?\b',  # allocated 50k
+    ]
+    
+    for pattern in budget_patterns:
+        match = re.search(pattern, text_lower)
+        if match:
+            amount = match.group(1)
+            # Return in a consistent format
+            try:
+                num = float(amount.replace(',', ''))
+                if num >= 1000:
+                    return f"{int(num/1000)}k"
+                else:
+                    return f"{int(num)}k"
+            except ValueError:
+                return amount + "k"
+    
+    return None
+
 # Enhanced late capture function
 def enhanced_late_capture(user_text: str, state: ConversationState) -> None:
     """Extract details from any turn and update state."""
@@ -105,6 +134,12 @@ def enhanced_late_capture(user_text: str, state: ConversationState) -> None:
         location = extract_location(user_text)
         if location and not state.location:
             state.location = location
+    
+    # Budget extraction
+    if not state.budget:
+        budget = extract_budget(user_text)
+        if budget:
+            state.budget = budget
 
 # Core enhanced controller
 REASK_PREFIX = "Just to confirm,"

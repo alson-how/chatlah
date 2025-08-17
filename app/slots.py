@@ -50,6 +50,7 @@ class ConversationState:
     style: Optional[str] = None
     location: Optional[str] = None
     scope: Optional[str] = None
+    budget: Optional[str] = None
     
     # Enhanced phone ask control
     asked_phone_count: int = 0
@@ -57,8 +58,8 @@ class ConversationState:
     
     # Checklist tracking for better question rotation
     last_asked_field: Optional[str] = None
-    field_ask_counts: Dict[str, int] = field(default_factory=lambda: {"name": 0, "phone": 0, "style": 0, "location": 0, "scope": 0})
-    last_field_ask_turn: Dict[str, int] = field(default_factory=lambda: {"name": -1, "phone": -1, "style": -1, "location": -1, "scope": -1})
+    field_ask_counts: Dict[str, int] = field(default_factory=lambda: {"name": 0, "phone": 0, "style": 0, "location": 0, "scope": 0, "budget": 0})
+    last_field_ask_turn: Dict[str, int] = field(default_factory=lambda: {"name": -1, "phone": -1, "style": -1, "location": -1, "scope": -1, "budget": -1})
     
     # Generic control
     asked_name_phone_once: bool = False
@@ -95,7 +96,8 @@ def get_dynamic_field_configs() -> List[Dict]:
             {'field_name': 'phone', 'question_text': 'What\'s the best phone number to reach you?', 'is_required': True, 'sort_order': 2},
             {'field_name': 'style', 'question_text': 'What kind of style or vibe you want?', 'is_required': True, 'sort_order': 3},
             {'field_name': 'location', 'question_text': 'Which area is the property located?', 'is_required': True, 'sort_order': 4},
-            {'field_name': 'scope', 'question_text': 'Which spaces are in scope? For example, living, kitchen, master bedroom.', 'is_required': False, 'sort_order': 5}
+            {'field_name': 'budget', 'question_text': 'How much you have allocated?', 'is_required': True, 'sort_order': 5},
+            {'field_name': 'scope', 'question_text': 'Which spaces are in scope? For example, living, kitchen, master bedroom.', 'is_required': False, 'sort_order': 6}
         ]
 
 def dynamic_next_slot(state: ConversationState) -> Optional[str]:

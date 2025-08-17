@@ -10,6 +10,15 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Changes (August 17, 2025)
 
+✅ **Budget Field Integration & Location Parsing Bug Fix - COMPLETED**:
+- **Fixed Critical Location Parsing**: Resolved issue where "I'm looking for ID for my condo" incorrectly tagged "ID" as location instead of recognizing it as Interior Design intent
+- **Added Budget Field**: Integrated budget field into ConversationState dataclass with complete extraction logic
+- **Budget Extraction Patterns**: Implemented regex patterns for "50k", "RM 100k", "allocated 50k", "budget 75k" formats
+- **Enhanced Field Tracking**: Updated field dictionaries and default configurations to include budget as required field
+- **Complete Flow Verified**: Tested full conversation from "ID for condo" query through all required fields (name, phone, style, location, budget) to appointment scheduling
+- **TESTING CONFIRMED**: Location parser no longer creates false positives, budget extraction works correctly, appointment scheduling triggers properly
+- **PRODUCTION READY**: All dynamic fields working correctly with robust conversation management and automatic completion detection
+
 ✅ **Enhanced Checklist System & Code Modularization - COMPLETED**:
 - **Intelligent Checklist Management**: Implemented comprehensive checklist system that tracks all required fields (name, phone, style, location, budget)
 - **Smart Question Rotation**: Added cooldown mechanism (2-turn minimum) to prevent asking same field repeatedly, with intelligent rotation to different questions
