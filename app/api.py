@@ -13,6 +13,7 @@ from utils.theme import mentions_theme, resolve_theme_url
 from utils.lead import extract_name, extract_phone, is_lead_only
 from utils.location import extract_location, mentions_location_need
 from app.database import save_lead, get_lead, get_all_leads, get_merchant_config
+from app.chat_logger import chat_logger
 from .mcp_tools import router as mcp_router
 import requests
 import time
@@ -170,7 +171,7 @@ def enhanced_handle_turn(user_text: str, state: ConversationState) -> str:
 
     # 5) If user expressed generic ID intent but we're still missing style, probe style first
     if slot in (Slot.NAME, Slot.PHONE) and is_generic_id_intent(user_text) and not state.style:
-        rag_line = rag_answer_one_liner(user_text) or ""
+        rag_line = rag_answer_one_liner(user_text, state=state) or ""
         style_probe = QUESTIONS[Slot.STYLE]
         return (rag_line + ("\n" if rag_line else "") + style_probe).strip()
 
@@ -194,7 +195,11 @@ def enhanced_handle_turn(user_text: str, state: ConversationState) -> str:
         return next_question
 
     # 7) Enhanced off-topic handling with smart phone policy
-    rag_line = rag_answer_one_liner(user_text)
+    # Check if we have name before providing detailed info
+    if not state.name and any(trigger in user_text.lower() for trigger in ["price", "cost", "how much", "quote", "quotation", "timeline", "revision"]):
+        return "Before that, can I know who am I speaking to?"
+    
+    rag_line = rag_answer_one_liner(user_text, state=state)
     question = get_slot_question_with_hints(slot)
 
     if slot == Slot.PHONE and not state.phone:
@@ -239,7 +244,23 @@ async def enhanced_ask(payload: dict):
     text = payload.get("text", "")
     
     state = get_enhanced_state(user_id)
+    
+    # Log user message
+    state_info = {
+        "current_slot": state.next_slot().name,
+        "collected_fields": {field: getattr(state, field, None) for field in ["name", "phone", "style", "location"]}
+    }
+    chat_logger.log_user_message(user_id, text, state_info)
+    
     reply = enhanced_handle_turn(text, state)
+    
+    # Log bot response
+    response_state_info = {
+        "current_slot": state.next_slot().name,
+        "collected_fields": {field: getattr(state, field, None) for field in ["name", "phone", "style", "location"]},
+        "missing_fields": get_missing_required_fields(state)
+    }
+    chat_logger.log_bot_response(user_id, reply, response_state_info)
     
     return {
         "reply": reply, 
@@ -273,6 +294,12 @@ async def leads_dashboard():
     return FileResponse("static/leads.html")
 
 
+@app.get("/chat-logs-dashboard")
+async def chat_logs_dashboard():
+    """Serve the chat logs dashboard interface."""
+    return FileResponse("static/chat-logs.html")
+
+
 @app.get("/health")
 def health():
     return {"ok": True}
@@ -286,6 +313,56 @@ def leads_endpoint():
         return {"leads": leads, "count": len(leads)}
     except Exception as e:
         return {"error": str(e), "leads": [], "count": 0}
+
+
+@app.get("/chat-logs")
+def get_chat_logs():
+    """Get list of available chat log files."""
+    try:
+        import os
+        from pathlib import Path
+        
+        logs_dir = Path("chat_logs")
+        if not logs_dir.exists():
+            return {"logs": [], "count": 0}
+        
+        log_files = []
+        for file_path in logs_dir.glob("*.txt"):
+            stat = file_path.stat()
+            log_files.append({
+                "filename": file_path.name,
+                "size": stat.st_size,
+                "created": stat.st_ctime,
+                "modified": stat.st_mtime
+            })
+        
+        # Sort by modification time (newest first)
+        log_files.sort(key=lambda x: x["modified"], reverse=True)
+        
+        return {"logs": log_files, "count": len(log_files)}
+    except Exception as e:
+        return {"error": str(e), "logs": [], "count": 0}
+
+
+@app.get("/chat-logs/{filename}")
+def get_chat_log_content(filename: str):
+    """Get content of a specific chat log file."""
+    try:
+        from pathlib import Path
+        
+        # Sanitize filename to prevent directory traversal
+        safe_filename = filename.replace("..", "").replace("/", "").replace("\\", "")
+        file_path = Path("chat_logs") / safe_filename
+        
+        if not file_path.exists():
+            raise HTTPException(status_code=404, detail="Chat log file not found")
+        
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        return {"filename": safe_filename, "content": content}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error reading chat log: {str(e)}")
 
 
 def load_system_prompt(tone_type: str = "customer_support") -> str:
@@ -527,6 +604,19 @@ def chat_endpoint(req: ChatRequest):
     })
     first_turn = st["first_turn"]
     user_text = req.user_message
+    
+    # Log user message
+    state_info = {
+        "thread_id": req.thread_id,
+        "first_turn": first_turn,
+        "collected_fields": {
+            "name": st.get("name"),
+            "phone": st.get("phone"), 
+            "location": st.get("location"),
+            "style": st.get("style_preference")
+        }
+    }
+    chat_logger.log_user_message(req.thread_id, user_text, state_info)
 
     # Extract and store all information from every message
     try:
@@ -603,15 +693,54 @@ def chat_endpoint(req: ChatRequest):
     # Detect intent and respond with optimized handlers
     intent = detect_intent(req.user_message)
     if intent != Intent.NONE:
-        # Ensure portfolio URL is properly passed
-        portfolio_url = getattr(req, 'portfolio_url', 'https://jablancinteriors.com/projects/')
-        intent_reply = respond_with_intent(intent, req.user_message, conv_state, portfolio_url)
-        if intent_reply:
-            st["turns"].append(("user", req.user_message))
-            st["turns"].append(("assistant", intent_reply))
-            st["summary"] = summarise(st["summary"], req.user_message, intent_reply)
-            st["first_turn"] = False
-            return ChatResponse(answer=intent_reply, sources=[])
+        # Handle services and pricing intents immediately, even on first contact
+        if intent in [Intent.SERVICES, Intent.PRICING]:
+            portfolio_url = getattr(req, 'portfolio_url', 'https://jablancinteriors.com/projects/')
+            intent_reply = respond_with_intent(intent, req.user_message, conv_state, portfolio_url)
+            if intent_reply:
+                st["turns"].append(("user", req.user_message))
+                st["turns"].append(("assistant", intent_reply))
+                st["summary"] = summarise(st["summary"], req.user_message, intent_reply)
+                st["first_turn"] = False
+                
+                # Log bot response for services/pricing intent
+                response_state_info = {
+                    "intent": intent.name,
+                    "first_turn": first_turn,
+                    "collected_fields": {
+                        "name": st.get("name"),
+                        "phone": st.get("phone"),
+                        "location": st.get("location"), 
+                        "style": st.get("style_preference")
+                    }
+                }
+                chat_logger.log_bot_response(req.thread_id, intent_reply, response_state_info)
+                
+                return ChatResponse(answer=intent_reply, sources=[])
+                
+        # Handle other intents with existing logic
+        elif intent in [Intent.PORTFOLIO, Intent.OFFICE_ADDRESS]:
+            portfolio_url = getattr(req, 'portfolio_url', 'https://jablancinteriors.com/projects/')
+            intent_reply = respond_with_intent(intent, req.user_message, conv_state, portfolio_url)
+            if intent_reply:
+                st["turns"].append(("user", req.user_message))
+                st["turns"].append(("assistant", intent_reply))
+                st["summary"] = summarise(st["summary"], req.user_message, intent_reply)
+                st["first_turn"] = False
+                
+                # Log bot response for portfolio/office intent
+                response_state_info = {
+                    "intent": intent.name,
+                    "collected_fields": {
+                        "name": st.get("name"),
+                        "phone": st.get("phone"),
+                        "location": st.get("location"), 
+                        "style": st.get("style_preference")
+                    }
+                }
+                chat_logger.log_bot_response(req.thread_id, intent_reply, response_state_info)
+                
+                return ChatResponse(answer=intent_reply, sources=[])
 
     # Dynamic conversation flow - only end when we have ALL required info
     if is_conversation_complete(st):
@@ -647,6 +776,24 @@ def chat_endpoint(req: ChatRequest):
         st["turns"].append(("assistant", reply))
         st["summary"] = summarise(st["summary"], req.user_message, reply)
         st["first_turn"] = False
+        
+        # Log bot response for conversation completion
+        response_state_info = {
+            "conversation_complete": True,
+            "appointment_scheduled": st.get("appointment_scheduled", False),
+            "collected_fields": {
+                "name": st.get("name"),
+                "phone": st.get("phone"),
+                "location": st.get("location"), 
+                "style": st.get("style_preference")
+            }
+        }
+        chat_logger.log_bot_response(req.thread_id, reply, response_state_info)
+        
+        # Close session when conversation is complete
+        summary = f"Lead captured: {st.get('name')} ({st.get('phone')}) - {st.get('location')} - {st.get('style_preference')}"
+        chat_logger.close_session(req.thread_id, summary)
+        
         return ChatResponse(answer=reply, sources=[])
     
     # Progressive information collection - ask for next missing piece
@@ -699,6 +846,20 @@ def chat_endpoint(req: ChatRequest):
         st["turns"].append(("assistant", reply))
         st["summary"] = summarise(st["summary"], req.user_message, reply)
         st["first_turn"] = False
+        
+        # Log bot response for greeting
+        response_state_info = {
+            "greeting": True,
+            "first_turn": first_turn,
+            "collected_fields": {
+                "name": st.get("name"),
+                "phone": st.get("phone"),
+                "location": st.get("location"), 
+                "style": st.get("style_preference")
+            }
+        }
+        chat_logger.log_bot_response(req.thread_id, reply, response_state_info)
+        
         return ChatResponse(answer=reply, sources=[])
 
     # Theme detection with contact handling
@@ -771,6 +932,19 @@ def chat_endpoint(req: ChatRequest):
     st["turns"].append(("assistant", reply))
     st["summary"] = summarise(st["summary"], req.user_message, reply)
     st["first_turn"] = False
+
+    # Log bot response for general chat
+    response_state_info = {
+        "conversation_complete": False,
+        "collected_fields": {
+            "name": st.get("name"),
+            "phone": st.get("phone"),
+            "location": st.get("location"), 
+            "style": st.get("style_preference")
+        },
+        "sources_count": len(top)
+    }
+    chat_logger.log_bot_response(req.thread_id, reply, response_state_info)
 
     # Optional: include source URLs back
     sources = []
