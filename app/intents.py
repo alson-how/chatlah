@@ -12,6 +12,7 @@ class Intent(Enum):
     PORTFOLIO = auto()
     GENERIC_ID = auto()
     INFO_REQUEST = auto()
+    OFFICE_ADDRESS = auto()
     NONE = auto()
 
 # Intent detection patterns
@@ -27,6 +28,12 @@ INFO_TRIGGERS = (
     "warranty", "quotation", "quote", "examples", "sample", "consultation"
 )
 
+OFFICE_ADDRESS_TRIGGERS = (
+    "where are you located", "office address", "your address", "your location",
+    "where is your office", "office location", "address", "where you based",
+    "where can I find you", "your office", "location", "where are you"
+)
+
 GENERIC_ID_PATTERN = r"\b(id|interior design|renovation|makeover|concept)\b"
 
 def detect_intent(text: str) -> Intent:
@@ -36,7 +43,11 @@ def detect_intent(text: str) -> Intent:
     
     text_lower = text.lower()
     
-    # Portfolio intent has highest priority
+    # Office address intent has highest priority for location queries
+    if any(trigger in text_lower for trigger in OFFICE_ADDRESS_TRIGGERS):
+        return Intent.OFFICE_ADDRESS
+    
+    # Portfolio intent has high priority
     if any(trigger in text_lower for trigger in PORTFOLIO_TRIGGERS):
         return Intent.PORTFOLIO
     
@@ -61,6 +72,10 @@ def is_generic_id_intent(text: str) -> bool:
 def is_info_request_intent(text: str) -> bool:
     """Check if text contains information request intent."""
     return detect_intent(text) == Intent.INFO_REQUEST
+
+def is_office_address_intent(text: str) -> bool:
+    """Check if text contains office address intent."""
+    return detect_intent(text) == Intent.OFFICE_ADDRESS
 
 def handle_portfolio_intent(text: str, portfolio_url: str = "https://jablancinteriors.com/projects/") -> str:
     """Handle portfolio intent and generate appropriate response."""
@@ -105,6 +120,33 @@ def rag_answer_one_liner(user_text: str, max_chars: int = 220) -> Optional[str]:
     
     return f"{snippet} (Source: {url})"
 
+def get_office_address_from_rag(user_text: str) -> Optional[str]:
+    """Get office address information from RAG."""
+    # Search for office address information
+    address_queries = [
+        "office address location contact",
+        "where located address",
+        "office location address contact information"
+    ]
+    
+    for query in address_queries:
+        hits = search(query, top_k=3) or []
+        for hit in hits:
+            content = (hit["text"] or "").lower()
+            url = hit["meta"].get("url", "")
+            
+            # Look for address patterns in the content
+            if any(addr_indicator in content for addr_indicator in [
+                "address", "located", "office", "visit", "jalan", "road", 
+                "kuala lumpur", "kl", "malaysia", "contact", "ampang"
+            ]):
+                snippet = (hit["text"] or "").strip()
+                if len(snippet) > 300:
+                    snippet = snippet[:300].rsplit(" ", 1)[0] + "..."
+                return f"{snippet} (Source: {url})"
+    
+    return None
+
 def respond_with_intent(intent: Intent, user_text: str, state, portfolio_url: str = "https://jablancinteriors.com/projects/") -> Optional[str]:
     """Generate response based on detected intent."""
     if intent == Intent.PORTFOLIO:
@@ -112,6 +154,14 @@ def respond_with_intent(intent: Intent, user_text: str, state, portfolio_url: st
         response = handle_portfolio_intent(user_text, portfolio_url)
         follow_up = next_missing_after_portfolio(state)
         return response + (f"\n{follow_up}" if follow_up else "")
+    
+    elif intent == Intent.OFFICE_ADDRESS:
+        address_info = get_office_address_from_rag(user_text)
+        if address_info:
+            from app.slots import next_missing_after_portfolio
+            follow_up = next_missing_after_portfolio(state)
+            return address_info + (f"\n{follow_up}" if follow_up else "")
+        return "Please contact us for our office address details."
     
     elif intent == Intent.INFO_REQUEST:
         return rag_answer_one_liner(user_text)
