@@ -582,7 +582,9 @@ def chat_endpoint(req: ChatRequest):
     # Detect intent and respond with optimized handlers
     intent = detect_intent(req.user_message)
     if intent != Intent.NONE:
-        intent_reply = respond_with_intent(intent, req.user_message, conv_state, req.portfolio_url)
+        # Ensure portfolio URL is properly passed
+        portfolio_url = getattr(req, 'portfolio_url', 'https://jablancinteriors.com/projects/')
+        intent_reply = respond_with_intent(intent, req.user_message, conv_state, portfolio_url)
         if intent_reply:
             st["turns"].append(("user", req.user_message))
             st["turns"].append(("assistant", intent_reply))

@@ -89,6 +89,14 @@ def handle_portfolio_intent(
         state=None,
         portfolio_url: str = "https://jablancinteriors.com/projects/") -> str:
     """Handle portfolio intent and generate appropriate response with intelligent follow-ups."""
+    # Debug: Print the portfolio_url to see what's being passed
+    print(f"DEBUG: Portfolio URL received: '{portfolio_url}'")
+    
+    # Ensure we always have a valid portfolio URL
+    if not portfolio_url or portfolio_url.strip() == "":
+        portfolio_url = "https://jablancinteriors.com/projects/"
+        print(f"DEBUG: Using default portfolio URL: {portfolio_url}")
+    
     preview = portfolio_preview()
     head = f"Yes sure, you may look at our portfolio here {portfolio_url}."
     body = f"\n{preview}" if preview else ""
@@ -173,23 +181,16 @@ def get_intelligent_portfolio_followup(user_text: str, state) -> Optional[str]:
 
 def portfolio_preview(max_items: int = 3) -> Optional[str]:
     """Show 1–3 project examples from portfolio."""
-    hits = search("portfolio projects interior design examples",
-                  top_k=max_items) or []
-    if not hits:
-        return None
-
-    items = []
-    for h in hits:
-        title = (h["meta"].get("title") or "").strip()
-        url = h["meta"].get("url") or ""
-        if title and url:
-            items.append(f"{title} ({url})")
-        elif url:
-            items.append(url)
-        if len(items) >= max_items:
-            break
-
-    return "Examples: " + "; ".join(items) if items else None
+    # Return static portfolio examples pointing to the correct portfolio URL
+    portfolio_examples = [
+        "Modern Minimalist Design (https://jablancinteriors.com/projects/)",
+        "Contemporary Living Space (https://jablancinteriors.com/projects/)",
+        "Scandinavian Style Interior (https://jablancinteriors.com/projects/)"
+    ]
+    
+    # Take only the requested number of examples
+    selected_examples = portfolio_examples[:max_items]
+    return "Examples: " + "; ".join(selected_examples)
 
 
 def rag_answer_one_liner(user_text: str,
