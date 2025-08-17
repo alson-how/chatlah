@@ -18,7 +18,9 @@ import requests
 import time
 import os
 import re
-from typing import Optional
+from typing import Optional, Dict, Tuple
+from dataclasses import dataclass, asdict
+from enum import Enum, auto
 
 app = FastAPI(title="RAG Site API", version="1.0.0")
 app.include_router(mcp_router)
@@ -54,25 +56,295 @@ except Exception:
 CHAT_SESSIONS = {
 }  # {thread_id: {"summary": str, "turns": [(role, content), ...], "first_turn": bool, "name": str, "phone": str}}
 
-# TONE_PROMPT removed - now using load_system_prompt() to load from /tone folder
+# Enhanced Conversation Management Configuration
+PORTFOLIO_URL = "https://jablancinteriors.com/projects/"
 
+# Short RAG answer triggers - enhanced with more patterns
+INFO_TRIGGERS = (
+    "do you", "can you", "how", "what", "price", "cost", "timeline", "lead time",
+    "revision", "portfolio", "past project", "projects", "process", "services",
+    "warranty", "quotation", "quote", "examples", "sample", "consultation"
+)
+
+# Rotating phone prompts for natural variation
+PHONE_PROMPTS = [
+    "What's the best phone number to reach you?",
+    "Could you share a contact number so I can follow up properly?",
+    "Mind sharing your phone number? I'll WhatsApp you the next steps.",
+]
+
+# Enhanced slot-driven conversation model
+class Slot(Enum):
+    NAME = auto()
+    PHONE = auto()
+    STYLE = auto()
+    LOCATION = auto()
+    SCOPE = auto()
+    NONE = auto()
+
+SLOT_QUESTIONS: Dict[Slot, str] = {
+    Slot.NAME:     "May I have your name?",
+    Slot.PHONE:    "What's the best phone number to reach you?",
+    Slot.STYLE:    "What kind of style or vibe you want?",
+    Slot.LOCATION: "Which area is the property located?",
+    Slot.SCOPE:    "Which spaces are in scope? For example, living, kitchen, master bedroom."
+}
+
+@dataclass
+class EnhancedConversationState:
+    user_id: str
+    lead_id: Optional[str] = None
+    name: Optional[str] = None
+    phone: Optional[str] = None
+    style: Optional[str] = None
+    location: Optional[str] = None
+    scope: Optional[str] = None
+    
+    # Enhanced phone ask control
+    asked_phone_count: int = 0
+    last_phone_prompt_turn: int = -1
+    
+    # Generic control
+    asked_name_phone_once: bool = False
+    turn_index: int = 0
+    
+    def next_slot(self) -> Slot:
+        if not self.name:     return Slot.NAME
+        if not self.phone:    return Slot.PHONE
+        if not self.style:    return Slot.STYLE
+        if not self.location: return Slot.LOCATION
+        if not self.scope:    return Slot.SCOPE
+        return Slot.NONE
+    
+    def to_dict(self): 
+        return asdict(self)
+
+# Enhanced intent detection
+PORTFOLIO_TRIGGERS = (
+    "portfolio", "past project", "past projects", "projects",
+    "work examples", "your work", "case study", "case studies", 
+    "references", "gallery", "showroom", "examples", "sample", "samples"
+)
+
+def is_portfolio_intent(text: str) -> bool:
+    t = (text or "").lower()
+    return any(k in t for k in PORTFOLIO_TRIGGERS)
+
+def is_generic_id_intent(text: str) -> bool:
+    return bool(re.search(r"\b(id|interior design|renovation|makeover|concept)\b", (text or ""), re.I))
+
+# Enhanced RAG helpers with portfolio preview
+def rag_answer_one_liner(user_text: str, max_chars: int = 220) -> Optional[str]:
+    """Answer side-questions briefly using RAG (1 sentence + 1 source)."""
+    t = (user_text or "").lower()
+    if not any(k in t for k in INFO_TRIGGERS):
+        return None
+    hits = search(user_text, top_k=2) or []
+    if not hits:
+        return None
+    h = hits[0]
+    url = h["meta"].get("url", "")
+    snippet = (h["text"] or "").strip()
+    if len(snippet) > max_chars:
+        snippet = snippet[:max_chars].rsplit(" ", 1)[0] + "..."
+    return f"{snippet} (Source: {url})"
+
+def portfolio_preview(max_items: int = 3) -> Optional[str]:
+    """Show 1–3 project examples from portfolio."""
+    hits = search("portfolio projects interior design examples", top_k=max_items) or []
+    if not hits:
+        return None
+    items = []
+    for h in hits:
+        title = (h["meta"].get("title") or "").strip()
+        url = h["meta"].get("url") or ""
+        if title and url:
+            items.append(f"{title} ({url})")
+        elif url:
+            items.append(url)
+        if len(items) >= max_items:
+            break
+    return "Examples: " + "; ".join(items) if items else None
+
+# Enhanced phone ask policy with cooldown and rotations
+def next_phone_prompt(state: EnhancedConversationState) -> Optional[str]:
+    # Cooldown: don't repeat within 2 turns
+    if state.asked_phone_count > 0 and (state.turn_index - state.last_phone_prompt_turn) < 2:
+        return None
+    # Stop after 3 attempts; keep progressing other slots
+    if state.asked_phone_count >= 3:
+        return None
+    variant = PHONE_PROMPTS[state.asked_phone_count % len(PHONE_PROMPTS)]
+    if state.name:
+        variant = f"Thanks, {state.name}. {variant}"
+    return variant
+
+def mark_phone_prompted(state: EnhancedConversationState):
+    state.asked_phone_count += 1
+    state.last_phone_prompt_turn = state.turn_index
+
+# Enhanced follow-up question helpers
 def next_missing_after_portfolio(state) -> Optional[str]:
     """Get next missing field question after portfolio interaction."""
-    if not state.style:
-        return "What kind of style or vibe you want?"
-    if not state.location:
-        return "Which area is the property located?"
-    if not state.phone:
-        return "What's the best phone number to reach you?"
+    if hasattr(state, 'style'):
+        if not state.style:    return SLOT_QUESTIONS[Slot.STYLE]
+        if not state.location: return SLOT_QUESTIONS[Slot.LOCATION]
+        if not state.phone:    return SLOT_QUESTIONS[Slot.PHONE]
+    else:
+        # Fallback for legacy state objects
+        if not getattr(state, 'style', None):
+            return "What kind of style or vibe you want?"
+        if not getattr(state, 'location', None):
+            return "Which area is the property located?"
+        if not getattr(state, 'phone', None):
+            return "What's the best phone number to reach you?"
     return None
 
 def next_non_phone_slot_question(state) -> Optional[str]:
     """Get next non-phone field question for conversation flow."""
-    if not state.style:
-        return "What kind of style or vibe you want?"
-    if not state.location:
-        return "Which area is the property located?"
+    if hasattr(state, 'style'):
+        if not state.style:    return SLOT_QUESTIONS[Slot.STYLE]
+        if not state.location: return SLOT_QUESTIONS[Slot.LOCATION]
+        if not state.scope:    return SLOT_QUESTIONS[Slot.SCOPE]
+    else:
+        # Fallback for legacy state objects
+        if not getattr(state, 'style', None):
+            return "What kind of style or vibe you want?"
+        if not getattr(state, 'location', None):
+            return "Which area is the property located?"
     return None
+
+# Enhanced late capture function
+def enhanced_late_capture(user_text: str, state: EnhancedConversationState) -> None:
+    """Extract details from any turn and update state."""
+    # Name extraction
+    try:
+        name, name_score = extract_name(user_text)
+        if name and name_score >= 2 and not state.name:
+            state.name = name
+    except (ValueError, TypeError):
+        pass
+    
+    # Phone extraction
+    phone = extract_phone(user_text)
+    if phone and not state.phone:
+        state.phone = phone
+    
+    # Style & Location extraction
+    try:
+        from utils.parser_my_style_location import parse_message
+        parsed = parse_message(user_text)
+        if parsed.get("style_theme") and not state.style:
+            state.style = parsed["style_theme"]
+        if parsed.get("location") and not state.location:
+            state.location = parsed["location"]
+    except ImportError:
+        # Fallback to basic location extraction
+        location = extract_location(user_text)
+        if location and not state.location:
+            state.location = location
+
+# Core enhanced controller
+REASK_PREFIX = "Just to confirm,"
+
+def enhanced_handle_turn(user_text: str, state: EnhancedConversationState) -> str:
+    """Enhanced slot-driven conversation handler with RAG integration."""
+    state.turn_index += 1
+
+    # 1) Late-capture anything provided this turn
+    enhanced_late_capture(user_text, state)
+
+    # 2) High-priority: Portfolio intent (always answer first)
+    if is_portfolio_intent(user_text):
+        preview = portfolio_preview()
+        head = f"Yes sure, you may look at our portfolio here {PORTFOLIO_URL}."
+        body = f"\n{preview}" if preview else ""
+        follow = next_missing_after_portfolio(state)
+        return (head + body + (f"\n{follow}" if follow else "")).strip()
+
+    # 3) Determine current slot
+    slot = state.next_slot()
+
+    # 4) If user expressed generic ID intent but we're still missing style, probe style first
+    if slot in (Slot.NAME, Slot.PHONE) and is_generic_id_intent(user_text) and not state.style:
+        rag_line = rag_answer_one_liner(user_text) or ""
+        style_probe = SLOT_QUESTIONS[Slot.STYLE]
+        return (rag_line + ("\n" if rag_line else "") + style_probe).strip()
+
+    # 5) Check if user answered current slot this turn
+    new_slot = state.next_slot()
+    if new_slot != slot:
+        # Optional: if style was just captured, send matching project link
+        if new_slot == Slot.LOCATION and mentions_theme(user_text):
+            link = resolve_theme_url(user_text)
+            if link:
+                return f"Sure—here's one project that fits: {link}\n{SLOT_QUESTIONS[new_slot]}"
+        return SLOT_QUESTIONS[new_slot]
+
+    # 6) Enhanced off-topic handling with smart phone policy
+    rag_line = rag_answer_one_liner(user_text)
+    hint = ""
+    if slot == Slot.STYLE:    hint = " For example, modern minimalist, warm neutral, or industrial."
+    if slot == Slot.LOCATION: hint = " For example, Mont Kiara, Bangsar, or Penang."
+    if slot == Slot.SCOPE:    hint = " For example, living and kitchen."
+    question = SLOT_QUESTIONS[slot] + hint
+
+    if slot == Slot.PHONE and not state.phone:
+        phone_prompt = next_phone_prompt(state)
+        if rag_line and phone_prompt:
+            mark_phone_prompted(state)
+            return f"{rag_line}\n{phone_prompt}"
+        if rag_line and not phone_prompt:
+            nxt = next_non_phone_slot_question(state)
+            return f"{rag_line}\n{nxt}" if nxt else rag_line
+        if (not rag_line) and phone_prompt:
+            mark_phone_prompted(state)
+            return phone_prompt
+        # Cooldown active: progress other slots
+        nxt = next_non_phone_slot_question(state)
+        if nxt:
+            return nxt
+        return "Share your contact whenever convenient and I'll send the next steps."
+
+    # Non-phone slots: answer side-topic briefly then re-ask
+    if rag_line:
+        return f"{rag_line}\n{REASK_PREFIX} {question}"
+    return question
+
+# Enhanced session management for legacy compatibility
+ENHANCED_SESSIONS: Dict[str, EnhancedConversationState] = {}
+
+def get_enhanced_state(user_id: str) -> EnhancedConversationState:
+    """Get enhanced conversation state for a user."""
+    if user_id not in ENHANCED_SESSIONS:
+        ENHANCED_SESSIONS[user_id] = EnhancedConversationState(user_id=user_id)
+    return ENHANCED_SESSIONS[user_id]
+
+# Enhanced ask endpoint using the optimized controller
+@app.post("/ask_enhanced")
+async def enhanced_ask(payload: dict):
+    """
+    Enhanced ask endpoint with slot-driven conversation management.
+    Expected payload: { "user_id": "<phone_or_whatsapp_id>", "text": "<user message>" }
+    """
+    user_id = payload.get("user_id", "anon")
+    text = payload.get("text", "")
+    
+    state = get_enhanced_state(user_id)
+    reply = enhanced_handle_turn(text, state)
+    
+    return {
+        "reply": reply, 
+        "state": state.to_dict(),
+        "current_slot": state.next_slot().name,
+        "completion_progress": {
+            "name": bool(state.name),
+            "phone": bool(state.phone),
+            "style": bool(state.style),
+            "location": bool(state.location),
+            "scope": bool(state.scope)
+        }
+    }
 
 
 @app.get("/")
