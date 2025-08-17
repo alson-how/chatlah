@@ -2,7 +2,7 @@
 
 ## Overview
 
-This is a production-ready Retrieval Augmented Generation (RAG) system that combines web crawling, content indexing, and advanced conversational AI capabilities. The system automatically crawls websites using the Firecrawl API, processes and chunks the content, stores it in ChromaDB for vector search, and provides intelligent business conversations through both a FastAPI backend and an interactive chat interface. The architecture features conversation memory, query rewriting, Malaysian business tone, and real-time chat flow to ensure professional, context-aware customer interactions.
+This is a production-ready multi-tenant RAG system with merchant onboarding capabilities. The system combines web crawling, content indexing, and configurable conversational AI that adapts to different merchant requirements across various industries. Merchants can configure custom information collection fields, conversation flows, and question templates. The system automatically crawls websites using the Firecrawl API, processes and chunks the content, stores it in ChromaDB for vector search, and provides intelligent business conversations through both a FastAPI backend and an interactive merchant setup interface.
 
 ## User Preferences
 
@@ -37,6 +37,12 @@ Preferred communication style: Simple, everyday language.
 - **Crawl Endpoint**: Website crawling with configurable parameters (max pages, subdomain inclusion)
 - **Ask Endpoint**: Question-answering with source citations, confidence scoring, and configurable response tone
 - **Chat Endpoint**: Enhanced conversational AI with Malaysian business tone, session management, and theme detection
+- **Merchant API Endpoints**: Complete merchant onboarding and configuration management
+  - `POST /api/v1/merchants`: Create new merchant with custom field configuration
+  - `GET /api/v1/merchants/{id}`: Retrieve merchant configuration
+  - `GET /api/v1/templates`: Get pre-built industry templates
+  - `POST /api/v1/chat`: Multi-tenant chat with merchant-specific flows
+  - `GET /api/v1/merchants/{id}/conversations`: View merchant conversation history
 - **Request/Response Models**: Pydantic models for validation and API documentation
 - **Dynamic Tone System**: Configurable response styles (customer_support, technical, casual) loaded from external files
 - **Theme Detection**: Intelligent style/aesthetic query detection with portfolio URL mapping
@@ -44,10 +50,15 @@ Preferred communication style: Simple, everyday language.
 ### User Interface Architecture
 - **Web Crawler Interface**: Main page for website crawling and content management
 - **Enhanced Chatbot Interface**: Professional chat interface with Malaysian business persona
+- **Merchant Setup Interface**: Comprehensive onboarding system for merchant configuration
+  - Template selection (Interior Design, Real Estate, Restaurant, Fitness)
+  - Custom field builder with drag-and-drop interface
+  - Field type configuration (Name, Phone, Email, Location, Style, Choice, Number, Text)
+  - Conversation tone settings (Professional, Friendly, Casual)
 - **Conversation Management**: Thread-based sessions with clear conversation history
 - **Responsive Design**: Mobile-friendly interfaces with modern UI components
-- **Cross-Navigation**: Seamless navigation between crawler and chat interfaces
-- **Advanced Features**: Dynamic multi-step conversation flow, complete lead profile collection (name, contact, location, style), conversation memory, greeting detection, query rewriting, portfolio integration, and intelligent progressive information gathering
+- **Cross-Navigation**: Seamless navigation between crawler, chat, and merchant setup interfaces
+- **Advanced Features**: Dynamic multi-step conversation flow, configurable lead profile collection, conversation memory, greeting detection, query rewriting, portfolio integration, and intelligent progressive information gathering
 
 ### Configuration Management
 - **Environment-Based**: Centralized settings with .env file support
@@ -79,15 +90,15 @@ Preferred communication style: Simple, everyday language.
 - **ChromaDB**: Open-source vector database for embedding storage and similarity search
 - **Persistent Storage**: Local file-based storage in configurable directory path
 
-### Lead Database
-- **PostgreSQL**: Production database for persistent lead storage and management
-- **Tables**: leads table with comprehensive contact tracking, theme interests, and timestamps
+### Multi-Tenant Database Architecture
+- **PostgreSQL**: Production database for persistent multi-tenant data management
+- **Merchant Configuration Tables**:
+  - `merchants`: Stores merchant profiles, field configurations, and conversation tones
+  - `conversation_sessions`: Thread-based session management with merchant-specific context
+  - `consumer_data`: Collected consumer information with merchant associations
+- **Legacy Compatibility**: Backward-compatible lead tables for existing Jablanc Interior workflows
 - **Environment Variables**: DATABASE_URL, PGHOST, PGPORT, PGUSER, PGPASSWORD, PGDATABASE
-
-### Lead Database
-- **PostgreSQL**: Production database for persistent lead storage and management
-- **Tables**: leads table with comprehensive contact tracking, theme interests, and timestamps
-- **Environment Variables**: DATABASE_URL, PGHOST, PGPORT, PGUSER, PGPASSWORD, PGDATABASE
+- **JSON Field Storage**: JSONB columns for flexible field configuration and collected data storage
 
 ### Machine Learning Models
 - **OpenAI Embeddings API**: Advanced text embedding generation service

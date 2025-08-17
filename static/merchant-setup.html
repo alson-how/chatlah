@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Merchant Setup - Configure Your Customer Information Collection</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .header h1 {
+            color: white;
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 1.1rem;
+        }
+
+        .setup-card {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            margin-bottom: 30px;
+        }
+
+        .form-group {
+            margin-bottom: 25px;
+        }
+
+        label {
+            display: block;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #333;
+        }
+
+        input, select, textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e1e5e9;
+            border-radius: 10px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .template-section {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 30px;
+            margin: 30px 0;
+        }
+
+        .template-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .template-card {
+            background: white;
+            border: 2px solid #e1e5e9;
+            border-radius: 15px;
+            padding: 20px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .template-card:hover {
+            border-color: #667eea;
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .template-card.selected {
+            border-color: #667eea;
+            background: #f0f4ff;
+        }
+
+        .template-card h3 {
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+
+        .fields-config {
+            background: #f8f9fa;
+            border-radius: 15px;
+            padding: 30px;
+            margin: 30px 0;
+        }
+
+        .field-item {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 15px;
+            border: 1px solid #e1e5e9;
+        }
+
+        .field-row {
+            display: grid;
+            grid-template-columns: 1fr 150px 200px auto;
+            gap: 15px;
+            align-items: center;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px 30px;
+            border: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+        }
+
+        .btn-danger {
+            background: #dc3545;
+            padding: 8px 15px;
+            font-size: 14px;
+        }
+
+        .btn-add {
+            background: #28a745;
+            margin-bottom: 20px;
+        }
+
+        .merchant-list {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            margin-top: 30px;
+        }
+
+        .merchant-item {
+            border: 1px solid #e1e5e9;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 15px;
+            background: #f8f9fa;
+        }
+
+        .status-complete { color: #28a745; }
+        .status-active { color: #ffc107; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🏪 Merchant Setup</h1>
+            <p>Configure what information you want to collect from your customers</p>
+        </div>
+
+        <div class="setup-card">
+            <h2>Create New Merchant Configuration</h2>
+            
+            <div class="form-group">
+                <label for="merchantName">Your Name</label>
+                <input type="text" id="merchantName" placeholder="e.g., Sarah Chen">
+            </div>
+
+            <div class="form-group">
+                <label for="companyName">Company Name</label>
+                <input type="text" id="companyName" placeholder="e.g., Chen Interior Design">
+            </div>
+
+            <div class="form-group">
+                <label for="conversationTone">Conversation Tone</label>
+                <select id="conversationTone">
+                    <option value="professional">Professional</option>
+                    <option value="friendly">Friendly</option>
+                    <option value="casual">Casual</option>
+                </select>
+            </div>
+
+            <div class="template-section">
+                <h3>Choose a Template (Optional)</h3>
+                <p>Select a pre-built template for your industry or create custom fields below</p>
+                
+                <div class="template-grid" id="templatesGrid">
+                    <!-- Templates will be loaded here -->
+                </div>
+            </div>
+
+            <div class="fields-config">
+                <h3>Custom Fields Configuration</h3>
+                <p>Configure what information you want to collect from customers</p>
+                
+                <button class="btn btn-add" onclick="addField()">+ Add Field</button>
+                
+                <div id="fieldsContainer">
+                    <!-- Custom fields will be added here -->
+                </div>
+            </div>
+
+            <div style="text-align: center; margin-top: 30px;">
+                <button class="btn" onclick="createMerchant()">Create Merchant Setup</button>
+            </div>
+        </div>
+
+        <div class="merchant-list">
+            <h2>Existing Merchants</h2>
+            <div id="merchantsList">
+                <!-- Merchants will be loaded here -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let selectedTemplate = null;
+        let customFields = [];
+
+        // Field types configuration
+        const fieldTypes = {
+            'text': 'Text',
+            'name': 'Name',
+            'phone': 'Phone',
+            'email': 'Email',
+            'location': 'Location',
+            'style': 'Style Preference',
+            'choice': 'Multiple Choice',
+            'number': 'Number'
+        };
+
+        // Load templates on page load
+        async function loadTemplates() {
+            try {
+                const response = await fetch('/api/v1/templates');
+                const templates = await response.json();
+                
+                const grid = document.getElementById('templatesGrid');
+                grid.innerHTML = '';
+                
+                Object.keys(templates).forEach(key => {
+                    const template = templates[key];
+                    const card = document.createElement('div');
+                    card.className = 'template-card';
+                    card.onclick = () => selectTemplate(key, template);
+                    
+                    card.innerHTML = `
+                        <h3>${template.name}</h3>
+                        <p>${template.fields.length} fields: ${template.fields.map(f => f.label).join(', ')}</p>
+                    `;
+                    
+                    grid.appendChild(card);
+                });
+            } catch (error) {
+                console.error('Error loading templates:', error);
+            }
+        }
+
+        function selectTemplate(templateKey, template) {
+            selectedTemplate = templateKey;
+            
+            // Update UI
+            document.querySelectorAll('.template-card').forEach(card => {
+                card.classList.remove('selected');
+            });
+            event.target.closest('.template-card').classList.add('selected');
+            
+            // Clear custom fields when template is selected
+            customFields = [];
+            document.getElementById('fieldsContainer').innerHTML = '';
+        }
+
+        function addField() {
+            const fieldId = `field_${Date.now()}`;
+            const field = {
+                field_id: fieldId,
+                field_type: 'text',
+                label: '',
+                question: '',
+                required: true,
+                choices: []
+            };
+            
+            customFields.push(field);
+            renderCustomFields();
+        }
+
+        function removeField(index) {
+            customFields.splice(index, 1);
+            renderCustomFields();
+        }
+
+        function renderCustomFields() {
+            const container = document.getElementById('fieldsContainer');
+            container.innerHTML = '';
+            
+            customFields.forEach((field, index) => {
+                const fieldDiv = document.createElement('div');
+                fieldDiv.className = 'field-item';
+                
+                fieldDiv.innerHTML = `
+                    <div class="field-row">
+                        <input type="text" placeholder="Field Label (e.g., Name)" 
+                               value="${field.label}" 
+                               onchange="updateField(${index}, 'label', this.value)">
+                        
+                        <select onchange="updateField(${index}, 'field_type', this.value)">
+                            ${Object.keys(fieldTypes).map(type => 
+                                `<option value="${type}" ${field.field_type === type ? 'selected' : ''}>${fieldTypes[type]}</option>`
+                            ).join('')}
+                        </select>
+                        
+                        <input type="text" placeholder="Question to ask" 
+                               value="${field.question}"
+                               onchange="updateField(${index}, 'question', this.value)">
+                        
+                        <button class="btn btn-danger" onclick="removeField(${index})">Remove</button>
+                    </div>
+                    
+                    <div style="margin-top: 10px;">
+                        <label>
+                            <input type="checkbox" ${field.required ? 'checked' : ''} 
+                                   onchange="updateField(${index}, 'required', this.checked)"> Required Field
+                        </label>
+                    </div>
+                    
+                    ${field.field_type === 'choice' ? `
+                        <div style="margin-top: 10px;">
+                            <input type="text" placeholder="Comma-separated choices (e.g., Option1, Option2)" 
+                                   value="${field.choices.join(', ')}"
+                                   onchange="updateField(${index}, 'choices', this.value.split(',').map(s => s.trim()))">
+                        </div>
+                    ` : ''}
+                `;
+                
+                container.appendChild(fieldDiv);
+            });
+        }
+
+        function updateField(index, property, value) {
+            customFields[index][property] = value;
+            if (property === 'field_type') {
+                renderCustomFields(); // Re-render to show/hide choices input
+            }
+        }
+
+        async function createMerchant() {
+            const name = document.getElementById('merchantName').value;
+            const company = document.getElementById('companyName').value;
+            const tone = document.getElementById('conversationTone').value;
+            
+            if (!name || !company) {
+                alert('Please fill in name and company');
+                return;
+            }
+            
+            const payload = {
+                name,
+                company,
+                conversation_tone: tone
+            };
+            
+            if (selectedTemplate) {
+                payload.template = selectedTemplate;
+            } else if (customFields.length > 0) {
+                payload.fields_config = customFields;
+            } else {
+                alert('Please select a template or add custom fields');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/v1/merchants', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    alert(`Merchant created successfully! ID: ${result.id}`);
+                    location.reload();
+                } else {
+                    alert('Error: ' + result.detail);
+                }
+            } catch (error) {
+                alert('Error creating merchant: ' + error.message);
+            }
+        }
+
+        // Initialize page
+        loadTemplates();
+    </script>
+</body>
+</html>

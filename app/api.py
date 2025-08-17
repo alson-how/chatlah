@@ -12,7 +12,7 @@ from chromadb import PersistentClient
 from utils.theme import mentions_theme, resolve_theme_url
 from utils.lead import extract_name, extract_phone, is_lead_only
 from utils.location import extract_location, mentions_location_need
-from app.database import save_lead, get_lead, get_all_leads
+from app.database import save_lead, get_lead, get_all_leads, get_merchant_config
 from .mcp_tools import router as mcp_router
 import requests
 import time
@@ -21,6 +21,10 @@ import re
 
 app = FastAPI(title="RAG Site API", version="1.0.0")
 app.include_router(mcp_router)
+
+# Include merchant router
+from app.merchant_api import router as merchant_router
+app.include_router(merchant_router, prefix="/api/v1")
 
 # Add CORS middleware
 app.add_middleware(
