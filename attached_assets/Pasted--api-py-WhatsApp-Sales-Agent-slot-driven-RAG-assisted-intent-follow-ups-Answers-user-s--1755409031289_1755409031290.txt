@@ -1,0 +1,521 @@
+# api.py
+# WhatsApp Sales Agent – slot-driven + RAG-assisted + intent follow-ups
+# - Answers user's intent first (e.g., portfolio), then follows up (style -> location -> phone)
+# - Late-captures details whenever provided
+# - Phone ask uses cooldown + rotating prompts (no infinite loop)
+# - Compact, production-ready FastAPI surface: /ask, /health
+
+from __future__ import annotations
+from typing import Dict, Optional, Tuple, List
+from dataclasses import dataclass, asdict
+from enum import Enum, auto
+import re
+import unicodedata
+
+from fastapi import FastAPI, Request
+
+# =============================================================================
+# Config
+# =============================================================================
+
+PORTFOLIO_URL = "https://jablancinteriors.com/projects/"
+
+INFO_TRIGGERS = (
+    "do you", "can you", "how", "what", "price", "cost", "timeline", "lead time",
+    "revision", "portfolio", "past project", "projects", "process", "services",
+    "warranty", "quotation", "quote"
+)
+
+PHONE_PROMPTS = [
+    "What’s the best phone number to reach you?",
+    "Could you share a contact number so I can follow up properly?",
+    "Mind sharing your phone number? I’ll WhatsApp you the next steps.",
+]
+
+# =============================================================================
+# Try to import your project's retriever/extractors; fall back to built-ins
+# =============================================================================
+
+# -- RAG retriever (search) --
+try:
+    from app.retriever import search  # must return [{ "text":..., "meta": {"url":..., "title":...}}]
+except Exception:
+    def search(query: str, top_k: int = 2) -> List[Dict]:
+        # Fallback no-op (returns nothing). Replace with your vector search.
+        return []
+
+# -- Optional theme helpers (if you maintain a THEME_MAP elsewhere) --
+try:
+    from utils.theme import resolve_theme_url as _resolve_theme_url
+    from utils.theme import mentions_theme as _mentions_theme
+except Exception:
+    _resolve_theme_url = None
+    _mentions_theme = None
+
+# =============================================================================
+# Conversation model (slots)
+# =============================================================================
+
+class Slot(Enum):
+    NAME = auto()
+    PHONE = auto()
+    STYLE = auto()
+    LOCATION = auto()
+    SCOPE = auto()
+    NONE = auto()
+
+QUESTIONS: Dict[Slot, str] = {
+    Slot.NAME:     "May I have your name?",
+    Slot.PHONE:    "What’s the best phone number to reach you?",
+    Slot.STYLE:    "What kind of style or vibe you want?",
+    Slot.LOCATION: "Which area is the property located?",
+    Slot.SCOPE:    "Which spaces are in scope? For example, living, kitchen, master bedroom."
+}
+
+@dataclass
+class ConversationState:
+    user_id: str
+    lead_id: Optional[str] = None
+    name: Optional[str] = None
+    phone: Optional[str] = None
+    style: Optional[str] = None
+    location: Optional[str] = None
+    scope: Optional[str] = None
+
+    # phone ask control
+    asked_phone_count: int = 0
+    last_phone_prompt_turn: int = -1
+
+    # generic control
+    asked_name_phone_once: bool = False
+    turn_index: int = 0  # increment each inbound message
+
+    def next_slot(self) -> Slot:
+        if not self.name:     return Slot.NAME
+        if not self.phone:    return Slot.PHONE
+        if not self.style:    return Slot.STYLE
+        if not self.location: return Slot.LOCATION
+        if not self.scope:    return Slot.SCOPE
+        return Slot.NONE
+
+    def to_dict(self): return asdict(self)
+
+# =============================================================================
+# Intent detection
+# =============================================================================
+
+class Intent(Enum):
+    PORTFOLIO = auto()
+    TIMELINE = auto()
+    PRICING = auto()
+    SERVICES = auto()
+    REVISION = auto()
+    CONTACT = auto()
+    GENERIC_ID = auto()
+    OTHER = auto()
+
+def detect_intent(text: str) -> Intent:
+    t = (text or "").lower()
+    if any(k in t for k in ["portfolio", "past project", "past projects", "projects", "your work", "gallery", "case study", "case studies", "references"]):
+        return Intent.PORTFOLIO
+    if any(k in t for k in ["timeline", "lead time", "how long"]):
+        return Intent.TIMELINE
+    if any(k in t for k in ["price", "cost", "budget", "quotation", "quote", "how much"]):
+        return Intent.PRICING
+    if any(k in t for k in ["service", "scope", "what do you do", "process"]):
+        return Intent.SERVICES
+    if "revision" in t or "revisions" in t or "changes" in t:
+        return Intent.REVISION
+    if any(k in t for k in ["contact", "who to contact", "point of contact"]):
+        return Intent.CONTACT
+    if re.search(r"\b(id|interior design|renovation|makeover|concept)\b", t):
+        return Intent.GENERIC_ID
+    return Intent.OTHER
+
+# =============================================================================
+# Follow-ups (after answering intent)
+# =============================================================================
+
+FOLLOWUP_STYLE    = "Do you have any style or vibe in mind?"
+FOLLOWUP_LOCATION = "Where are you located?"
+FOLLOWUP_PHONE    = "What’s the best phone number to reach you?"
+
+INTENT_FOLLOWUP_ORDER = {
+    Intent.PORTFOLIO:   ("style", "location", "phone"),
+    Intent.TIMELINE:    ("style", "location", "phone"),
+    Intent.PRICING:     ("style", "location", "phone"),
+    Intent.SERVICES:    ("style", "location", "phone"),
+    Intent.REVISION:    ("style", "location", "phone"),
+    Intent.CONTACT:     ("style", "location"),  # usually phone/name is implied here
+    Intent.GENERIC_ID:  ("style", "location", "phone"),
+    Intent.OTHER:       ("style", "location", "phone"),
+}
+
+def followup_for_intent(intent: Intent, state: ConversationState) -> Optional[str]:
+    order = INTENT_FOLLOWUP_ORDER.get(intent, ("style","location","phone"))
+    for item in order:
+        if item == "style" and not state.style:
+            return FOLLOWUP_STYLE
+        if item == "location" and not state.location:
+            return FOLLOWUP_LOCATION
+        if item == "phone" and not state.phone:
+            return FOLLOWUP_PHONE
+    return None
+
+# =============================================================================
+# RAG helpers
+# =============================================================================
+
+def rag_answer_one_liner(user_text: str, max_chars: int = 220) -> Optional[str]:
+    """Answer side-questions briefly using RAG (1 sentence + 1 source)."""
+    t = (user_text or "").lower()
+    if not any(k in t for k in INFO_TRIGGERS):
+        return None
+    hits = search(user_text, top_k=2) or []
+    if not hits:
+        return None
+    h = hits[0]
+    url = (h.get("meta") or {}).get("url", "")
+    snippet = (h.get("text") or "").strip()
+    if len(snippet) > max_chars:
+        snippet = snippet[:max_chars].rsplit(" ", 1)[0] + "..."
+    return f"{snippet} (Source: {url})"
+
+def portfolio_preview(max_items: int = 3) -> Optional[str]:
+    """Optional: show 1–3 project examples. Keep short to avoid WhatsApp walls of text."""
+    hits = search("portfolio projects site:jablancinteriors.com", top_k=max_items) or []
+    if not hits:
+        return None
+    items = []
+    for h in hits:
+        title = ((h.get("meta") or {}).get("title") or "").strip()
+        url = (h.get("meta") or {}).get("url") or ""
+        if title and url:
+            items.append(f"{title} ({url})")
+        if len(items) >= max_items:
+            break
+    return "Examples: " + "; ".join(items) if items else None
+
+# =============================================================================
+# Phone ask policy (cooldown + rotations)
+# =============================================================================
+
+def next_phone_prompt(state: ConversationState) -> Optional[str]:
+    # Cooldown: don’t repeat within 2 turns
+    if state.asked_phone_count > 0 and (state.turn_index - state.last_phone_prompt_turn) < 2:
+        return None
+    # Stop after 3 attempts; keep progressing other slots
+    if state.asked_phone_count >= 3:
+        return None
+    variant = PHONE_PROMPTS[state.asked_phone_count % len(PHONE_PROMPTS)]
+    if state.name:
+        variant = f"Thanks, {state.name}. {variant}"
+    return variant
+
+def mark_phone_prompted(state: ConversationState):
+    state.asked_phone_count += 1
+    state.last_phone_prompt_turn = state.turn_index
+
+# =============================================================================
+# Late-capture (extract details from any turn)
+# =============================================================================
+
+# We'll attempt to import your extractors. If not present, fallback minimal ones below.
+try:
+    from utils.lead import extract_name as _extract_name
+except Exception:
+    _extract_name = None
+try:
+    from utils.lead import extract_phone as _extract_phone
+except Exception:
+    _extract_phone = None
+try:
+    from parser_my_style_location import parse_message as _parse_style_location
+except Exception:
+    _parse_style_location = None
+
+def late_capture(user_text: str, state: ConversationState) -> None:
+    # Name
+    name, name_score = extract_name(user_text)
+    if name and name_score >= 2 and not state.name:
+        state.name = name
+
+    # Phone
+    phone = extract_phone(user_text)
+    if phone and not state.phone:
+        state.phone = phone
+
+    # Style & Location
+    parsed = parse_style_location(user_text)  # {"style_theme", "location", ...}
+    if parsed.get("style_theme") and not state.style:
+        state.style = parsed["style_theme"]
+    if parsed.get("location") and not state.location:
+        state.location = parsed["location"]
+
+# =============================================================================
+# Intent responders (answer + contextual follow-up)
+# =============================================================================
+
+def respond_with_intent(intent: Intent, user_text: str, state: ConversationState) -> Optional[str]:
+    if intent == Intent.PORTFOLIO:
+        head = f"Yes sure, you may look at our portfolio here {PORTFOLIO_URL}."
+        preview = portfolio_preview()
+        answer = head + (f"\n{preview}" if preview else "")
+    elif intent == Intent.TIMELINE:
+        answer = rag_answer_one_liner("timeline for interior design projects in Malaysia") \
+                 or "Usually 6–10 weeks after confirmation."
+    elif intent == Intent.PRICING:
+        answer = rag_answer_one_liner("pricing for Jablanc Interiors services") \
+                 or "We’ll estimate based on area and scope. I can share a range once I know your style and location."
+    elif intent == Intent.SERVICES:
+        answer = rag_answer_one_liner("services offered by Jablanc Interiors") \
+                 or "We handle end-to-end interior design for residential and commercial spaces."
+    elif intent == Intent.REVISION:
+        answer = "Yes—small tweaks are included; bigger changes will be quoted first."
+    elif intent == Intent.CONTACT:
+        answer = "This is Mei Yee. I’ll be your contact from start to finish. Reach me at +60166046388."
+    elif intent == Intent.GENERIC_ID:
+        answer = "We can help with your interior design from concept to handover."
+    else:
+        answer = rag_answer_one_liner(user_text) or None
+
+    if answer is None:
+        return None
+
+    # Add a contextual follow-up (style -> location -> phone), respecting phone cooldown
+    fup = followup_for_intent(intent, state)
+    if fup == FOLLOWUP_PHONE and not state.phone:
+        pp = next_phone_prompt(state)
+        if pp:
+            mark_phone_prompted(state)
+            return f"{answer}\n{pp}"
+        # cooldown or attempts maxed: swap to next non-phone ask if any
+        alt = next_non_phone_slot_question(state)
+        if alt:
+            return f"{answer}\n{alt}"
+        return answer
+
+    if fup:
+        return f"{answer}\n{fup}"
+    return answer
+
+# =============================================================================
+# Controller: one reply per turn
+# =============================================================================
+
+REASK_PREFIX = "Just to confirm,"
+
+def handle_turn(user_text: str, state: ConversationState) -> str:
+    state.turn_index += 1
+
+    # 0) Late-capture anything provided this turn
+    late_capture(user_text, state)
+
+    # 1) Intent-first response with built-in follow-up
+    intent = detect_intent(user_text)
+    intent_reply = respond_with_intent(intent, user_text, state)
+    if intent_reply:
+        return intent_reply
+
+    # 2) Determine current slot
+    slot = state.next_slot()
+
+    # 3) If user showed generic ID intent but we still need style, probe style first
+    if slot in (Slot.NAME, Slot.PHONE) and intent == Intent.GENERIC_ID and not state.style:
+        rag_line = rag_answer_one_liner(user_text) or ""
+        style_probe = FOLLOWUP_STYLE
+        return (rag_line + ("\n" if rag_line else "") + style_probe).strip()
+
+    # 4) If the user actually answered the current slot this turn, the late-capture already stored it.
+    #    Move on to the next slot question.
+    new_slot = state.next_slot()
+    if new_slot != slot:
+        # Optional: if style was just captured and you maintain THEME_MAP, send one matching link
+        if new_slot == Slot.LOCATION and mentions_theme(user_text):
+            link = resolve_theme_url(user_text)
+            if link:
+                return f"Sure—here’s one project that fits: {link}\n{QUESTIONS[new_slot]}"
+        return QUESTIONS[new_slot]
+
+    # 5) Off-topic handling with RAG + smart phone ask policy
+    rag_line = rag_answer_one_liner(user_text)
+    hint = ""
+    if slot == Slot.STYLE:    hint = " For example, modern minimalist, warm neutral, or industrial."
+    if slot == Slot.LOCATION: hint = " For example, Mont Kiara, Bangsar, or Penang."
+    if slot == Slot.SCOPE:    hint = " For example, living and kitchen."
+    question = QUESTIONS[slot] + hint
+
+    if slot == Slot.PHONE and not state.phone:
+        phone_prompt = next_phone_prompt(state)
+        if rag_line and phone_prompt:
+            mark_phone_prompted(state)
+            return f"{rag_line}\n{phone_prompt}"
+        if rag_line and not phone_prompt:
+            nxt = next_non_phone_slot_question(state)
+            return f"{rag_line}\n{nxt}" if nxt else rag_line
+        if (not rag_line) and phone_prompt:
+            mark_phone_prompted(state)
+            return phone_prompt
+        # Cooldown active and no side-topic: progress other slots
+        nxt = next_non_phone_slot_question(state)
+        if nxt:
+            return nxt
+        return "Share your contact whenever convenient and I’ll send the next steps."
+
+    # Non-phone slots: answer side-topic briefly then re-ask
+    if rag_line:
+        return f"{rag_line}\n{REASK_PREFIX} {question}"
+    return question
+
+# =============================================================================
+# Follow-up helpers (centralized)
+# =============================================================================
+
+def next_missing_after_portfolio(state: ConversationState) -> Optional[str]:
+    if not state.style:    return QUESTIONS[Slot.STYLE]
+    if not state.location: return QUESTIONS[Slot.LOCATION]
+    if not state.phone:    return QUESTIONS[Slot.PHONE]
+    return None
+
+def next_non_phone_slot_question(state: ConversationState) -> Optional[str]:
+    if not state.style:    return FOLLOWUP_STYLE
+    if not state.location: return FOLLOWUP_LOCATION
+    if not state.scope:    return QUESTIONS[Slot.SCOPE]
+    return None
+
+# =============================================================================
+# FastAPI surface
+# =============================================================================
+
+app = FastAPI(title="Sales Agent API (Refactored)", version="2.1.0")
+
+# Replace with Redis/DB in production
+SESSIONS: Dict[str, ConversationState] = {}
+
+def get_state(user_id: str) -> ConversationState:
+    if user_id not in SESSIONS:
+        SESSIONS[user_id] = ConversationState(user_id=user_id)
+    return SESSIONS[user_id]
+
+@app.post("/ask")
+async def ask(payload: Dict):
+    """
+    Expected payload:
+      { "user_id": "<phone_or_whatsapp_id>", "text": "<user message>" }
+    """
+    user_id = payload.get("user_id") or "anon"
+    text = payload.get("text") or ""
+    state = get_state(user_id)
+    reply = handle_turn(text, state)
+    return {"reply": reply, "state": state.to_dict()}
+
+@app.get("/health")
+def health():
+    return {"ok": True}
+
+# =============================================================================
+# -------------------- Built-in fallback extractors (optional) -----------------
+# If you already have robust extractors, delete everything below this line.
+# =============================================================================
+
+# ---- Name extractor (heuristic) ----
+TITLE_RE = re.compile(r"^\s*(encik|en\.|puan|pn\.|cik|tuan|dato|datin|dr|ir|mr|mrs|ms|madam|sir)\s+", re.I)
+COMPANY_HINTS_RE = re.compile(r"\b(sdn|bhd|plt|enterprise|trading|resources|holdings)\b", re.I)
+
+def _norm(s: str) -> str:
+    s = unicodedata.normalize("NFKC", s or "")
+    s = s.strip()
+    return s
+
+def extract_name(text: str) -> Tuple[Optional[str], int]:
+    if _extract_name:
+        try:
+            nm, score = _extract_name(text)
+            return nm, score
+        except Exception:
+            pass
+    s = _norm(text)
+    # Guess name from patterns like "I'm <name>", "I am <name>", "This is <name>", "Name: <name>"
+    m = re.search(r"(?:i am|i'm|this is|name is|my name is|name:)\s+([A-Za-zÀ-ÖØ-öø-ÿ’' .\-]{2,60})", s, re.I)
+    if not m:
+        return None, 0
+    cand = TITLE_RE.sub("", m.group(1)).strip()
+    if "@" in cand or any(ch.isdigit() for ch in cand):
+        return None, 0
+    if COMPANY_HINTS_RE.search(cand):
+        return None, 0
+    tokens = cand.split()
+    if len(tokens) == 0 or len(tokens) > 5 or any(len(t) > 25 for t in tokens):
+        return None, 0
+    return cand, 2  # score 2 = acceptable
+
+# ---- Phone extractor (MY formats, lenient) ----
+MY_PHONE_RE = re.compile(r"(?:\+?6?0[-\s]?)?(?:1\d|3|4|5|6|7|8|9)\d(?:[-\s]?\d){6,8}\b")
+
+def extract_phone(text: str) -> Optional[str]:
+    if _extract_phone:
+        try:
+            return _extract_phone(text)
+        except Exception:
+            pass
+    m = MY_PHONE_RE.search(text or "")
+    return m.group(0).strip() if m else None
+
+# ---- Style/Location parser (minimal; replace with your parser if available) ----
+STYLE_KEYWORDS = [
+    "modern minimalist", "minimalist", "modern", "contemporary", "industrial",
+    "scandinavian", "warm neutral", "serene", "elegant", "industrial vibe"
+]
+CITY_ALIASES = {
+    "kl": "Kuala Lumpur", "kuala lumpur": "Kuala Lumpur",
+    "pj": "Petaling Jaya", "petaling jaya": "Petaling Jaya",
+    "mont kiara": "Mont Kiara", "bangsar": "Bangsar", "damansara": "Damansara",
+    "penang": "Penang", "johor bahru": "Johor Bahru", "jb": "Johor Bahru",
+    "desa parkcity": "Desa ParkCity"
+}
+
+def parse_style_location(text: str) -> Dict[str, Optional[str]]:
+    if _parse_style_location:
+        try:
+            return _parse_style_location(text)
+        except Exception:
+            pass
+    t = (text or "").lower()
+    style_theme = None
+    for kw in STYLE_KEYWORDS:
+        if kw in t:
+            style_theme = kw
+            break
+    location = None
+    t2 = f" {t} "
+    for alias in sorted(CITY_ALIASES.keys(), key=lambda x: -len(x)):
+        if f" {alias} " in t2:
+            location = CITY_ALIASES[alias]
+            break
+    return {"style_theme": style_theme, "location": location}
+
+# ---- Theme helpers (fallbacks) ----
+def mentions_theme(text: str) -> bool:
+    if _mentions_theme:
+        try:
+            return _mentions_theme(text)
+        except Exception:
+            pass
+    t = (text or "").lower()
+    return any(k in t for k in STYLE_KEYWORDS)
+
+def resolve_theme_url(text: str) -> Optional[str]:
+    if _resolve_theme_url:
+        try:
+            return _resolve_theme_url(text)
+        except Exception:
+            pass
+    # minimal demo mapping
+    t = (text or "").lower()
+    if "industrial" in t:
+        return "https://jablancinteriors.com/portfolio/eureka-setia-city-mall/"
+    if "warm" in t or "neutral" in t:
+        return "https://jablancinteriors.com/portfolio/88-bandar-utama/"
+    if "modern minimalist" in t or "minimalist" in t or "modern" in t:
+        return "https://jablancinteriors.com/portfolio/park-regent-desa-park-city/"
+    return None

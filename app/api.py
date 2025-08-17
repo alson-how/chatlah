@@ -86,7 +86,7 @@ class Slot(Enum):
     SCOPE = auto()
     NONE = auto()
 
-SLOT_QUESTIONS: Dict[Slot, str] = {
+QUESTIONS: Dict[Slot, str] = {
     Slot.NAME:     "May I have your name?",
     Slot.PHONE:    "What's the best phone number to reach you?",
     Slot.STYLE:    "What kind of style or vibe you want?",
@@ -104,7 +104,7 @@ APPOINTMENT_MESSAGES = [
 ]
 
 @dataclass
-class EnhancedConversationState:
+class ConversationState:
     user_id: str
     lead_id: Optional[str] = None
     name: Optional[str] = None
@@ -184,7 +184,7 @@ def portfolio_preview(max_items: int = 3) -> Optional[str]:
     return "Examples: " + "; ".join(items) if items else None
 
 # Enhanced phone ask policy with cooldown and rotations
-def next_phone_prompt(state: EnhancedConversationState) -> Optional[str]:
+def next_phone_prompt(state: ConversationState) -> Optional[str]:
     # Cooldown: don't repeat within 2 turns
     if state.asked_phone_count > 0 and (state.turn_index - state.last_phone_prompt_turn) < 2:
         return None
@@ -196,43 +196,27 @@ def next_phone_prompt(state: EnhancedConversationState) -> Optional[str]:
         variant = f"Thanks, {state.name}. {variant}"
     return variant
 
-def mark_phone_prompted(state: EnhancedConversationState):
+def mark_phone_prompted(state: ConversationState):
     state.asked_phone_count += 1
     state.last_phone_prompt_turn = state.turn_index
 
 # Enhanced follow-up question helpers
-def next_missing_after_portfolio(state) -> Optional[str]:
+def next_missing_after_portfolio(state: ConversationState) -> Optional[str]:
     """Get next missing field question after portfolio interaction."""
-    if hasattr(state, 'style'):
-        if not state.style:    return SLOT_QUESTIONS[Slot.STYLE]
-        if not state.location: return SLOT_QUESTIONS[Slot.LOCATION]
-        if not state.phone:    return SLOT_QUESTIONS[Slot.PHONE]
-    else:
-        # Fallback for legacy state objects
-        if not getattr(state, 'style', None):
-            return "What kind of style or vibe you want?"
-        if not getattr(state, 'location', None):
-            return "Which area is the property located?"
-        if not getattr(state, 'phone', None):
-            return "What's the best phone number to reach you?"
+    if not state.style:    return QUESTIONS[Slot.STYLE]
+    if not state.location: return QUESTIONS[Slot.LOCATION]
+    if not state.phone:    return QUESTIONS[Slot.PHONE]
     return None
 
-def next_non_phone_slot_question(state) -> Optional[str]:
+def next_non_phone_slot_question(state: ConversationState) -> Optional[str]:
     """Get next non-phone field question for conversation flow."""
-    if hasattr(state, 'style'):
-        if not state.style:    return SLOT_QUESTIONS[Slot.STYLE]
-        if not state.location: return SLOT_QUESTIONS[Slot.LOCATION]
-        if not state.scope:    return SLOT_QUESTIONS[Slot.SCOPE]
-    else:
-        # Fallback for legacy state objects
-        if not getattr(state, 'style', None):
-            return "What kind of style or vibe you want?"
-        if not getattr(state, 'location', None):
-            return "Which area is the property located?"
+    if not state.style:    return QUESTIONS[Slot.STYLE]
+    if not state.location: return QUESTIONS[Slot.LOCATION]
+    if not state.scope:    return QUESTIONS[Slot.SCOPE]
     return None
 
 # Enhanced late capture function
-def enhanced_late_capture(user_text: str, state: EnhancedConversationState) -> None:
+def enhanced_late_capture(user_text: str, state: ConversationState) -> None:
     """Extract details from any turn and update state."""
     # Name extraction
     try:
@@ -280,7 +264,7 @@ def get_dynamic_field_configs():
             {'field_name': 'scope', 'question_text': 'Which spaces are in scope? For example, living, kitchen, master bedroom.', 'is_required': False, 'sort_order': 5}
         ]
 
-def dynamic_next_slot(state: EnhancedConversationState) -> Optional[str]:
+def dynamic_next_slot(state: ConversationState) -> Optional[str]:
     """Get next missing required field based on admin configuration."""
     field_configs = get_dynamic_field_configs()
     required_fields = [f for f in field_configs if f['is_required']]
@@ -293,7 +277,7 @@ def dynamic_next_slot(state: EnhancedConversationState) -> Optional[str]:
     
     return None
 
-def is_ready_for_appointment_dynamic(state: EnhancedConversationState) -> bool:
+def is_ready_for_appointment_dynamic(state: ConversationState) -> bool:
     """Check if all required fields are collected based on admin configuration."""
     field_configs = get_dynamic_field_configs()
     required_fields = [f for f in field_configs if f['is_required']]
@@ -305,7 +289,7 @@ def is_ready_for_appointment_dynamic(state: EnhancedConversationState) -> bool:
     
     return True
 
-def enhanced_handle_turn(user_text: str, state: EnhancedConversationState) -> str:
+def enhanced_handle_turn(user_text: str, state: ConversationState) -> str:
     """Enhanced slot-driven conversation handler with RAG integration and appointment scheduling."""
     state.turn_index += 1
 
@@ -338,7 +322,7 @@ def enhanced_handle_turn(user_text: str, state: EnhancedConversationState) -> st
     # 5) If user expressed generic ID intent but we're still missing style, probe style first
     if slot in (Slot.NAME, Slot.PHONE) and is_generic_id_intent(user_text) and not state.style:
         rag_line = rag_answer_one_liner(user_text) or ""
-        style_probe = SLOT_QUESTIONS[Slot.STYLE]
+        style_probe = QUESTIONS[Slot.STYLE]
         return (rag_line + ("\n" if rag_line else "") + style_probe).strip()
 
     # 6) Check if user answered current slot this turn - use dynamic slot checking
@@ -364,7 +348,7 @@ def enhanced_handle_turn(user_text: str, state: EnhancedConversationState) -> st
         return "Thank you for providing all the information! Our team will be in touch soon."
     
     # If there's a next question to ask, check if it's different from what we would have asked before
-    if next_question and next_question != SLOT_QUESTIONS.get(slot, ""):
+    if next_question and next_question != QUESTIONS.get(slot, ""):
         return next_question
 
     # 7) Enhanced off-topic handling with smart phone policy
@@ -373,7 +357,7 @@ def enhanced_handle_turn(user_text: str, state: EnhancedConversationState) -> st
     if slot == Slot.STYLE:    hint = " For example, modern minimalist, warm neutral, or industrial."
     if slot == Slot.LOCATION: hint = " For example, Mont Kiara, Bangsar, or Penang."
     if slot == Slot.SCOPE:    hint = " For example, living and kitchen."
-    question = SLOT_QUESTIONS[slot] + hint
+    question = QUESTIONS[slot] + hint
 
     if slot == Slot.PHONE and not state.phone:
         phone_prompt = next_phone_prompt(state)
@@ -398,12 +382,12 @@ def enhanced_handle_turn(user_text: str, state: EnhancedConversationState) -> st
     return question
 
 # Enhanced session management for legacy compatibility
-ENHANCED_SESSIONS: Dict[str, EnhancedConversationState] = {}
+ENHANCED_SESSIONS: Dict[str, ConversationState] = {}
 
-def get_enhanced_state(user_id: str) -> EnhancedConversationState:
+def get_enhanced_state(user_id: str) -> ConversationState:
     """Get enhanced conversation state for a user."""
     if user_id not in ENHANCED_SESSIONS:
-        ENHANCED_SESSIONS[user_id] = EnhancedConversationState(user_id=user_id)
+        ENHANCED_SESSIONS[user_id] = ConversationState(user_id=user_id)
     return ENHANCED_SESSIONS[user_id]
 
 # Enhanced ask endpoint using the optimized controller
