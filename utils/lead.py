@@ -105,7 +105,11 @@ def is_lead_only(text: str) -> bool:
     text = text.lower().strip()
     
     # If it contains name or phone patterns but no other meaningful content
-    has_name = bool(extract_name(text)[0])  # extract_name now returns tuple
+    try:
+        name_result = extract_name(text)
+        has_name = bool(name_result[0]) if name_result and len(name_result) > 0 else False
+    except (IndexError, TypeError):
+        has_name = False
     has_phone = bool(extract_phone(text))
     
     if not (has_name or has_phone):
