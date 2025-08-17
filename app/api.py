@@ -33,6 +33,10 @@ app.include_router(merchant_router, prefix="/api/v1")
 from admin.admin_api import router as admin_router
 app.include_router(admin_router)
 
+# Include appointment router for Google Calendar integration
+from app.appointment_api import router as appointment_router
+app.include_router(appointment_router, prefix="/api/appointments")
+
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
@@ -612,8 +616,28 @@ def chat_endpoint(req: ChatRequest):
     # Dynamic conversation flow - only end when we have ALL required info
     if is_conversation_complete(st):
         final_name = st.get("name", "there")
-        reply = f"Perfect! Thank you {final_name}. I have all the details I need - your contact info, location ({st.get('location')}), and style preference ({st.get('style_preference')}). I'll prepare a proposal and contact you soon at {st.get('phone')}."
+        
+        # Attempt to schedule appointment automatically
+        from app.calendar_integration import schedule_appointment_for_lead
+        
+        appointment_result = schedule_appointment_for_lead(
+            name=st.get("name"),
+            phone=st.get("phone"),
+            location=st.get("location"),
+            style=st.get("style_preference")
+        )
+        
+        if appointment_result['success']:
+            reply = appointment_result['message']
+        else:
+            # Fallback to manual follow-up
+            reply = appointment_result.get('fallback_message', 
+                f"Perfect! Thank you {final_name}. I have all the details I need - your contact info, location ({st.get('location')}), and style preference ({st.get('style_preference')}). I'll prepare a proposal and contact you soon at {st.get('phone')}.")
+        
         st["conversation_complete"] = True
+        st["appointment_scheduled"] = appointment_result.get('success', False)
+        st["appointment_details"] = appointment_result.get('details', {})
+        
         st["turns"].append(("user", req.user_message))
         st["turns"].append(("assistant", reply))
         st["summary"] = summarise(st["summary"], req.user_message, reply)
