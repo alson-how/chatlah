@@ -8,6 +8,12 @@ This is a production-ready multi-tenant RAG system designed for merchant onboard
 
 Preferred communication style: Simple, everyday language.
 
+## Recent Changes
+
+- **GitHub Repository Setup**: Created comprehensive repository configuration with professional README, Docker deployment files, and authentication guides
+- **Docker Deployment Package**: Production-ready containers with development and production configurations for Digital Ocean
+- **Project Cleanup**: Streamlined codebase by removing unused files and organizing structure for deployment
+
 ## System Architecture
 
 ### Backend Framework
