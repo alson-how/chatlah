@@ -1,6 +1,7 @@
 # admin_database.py
 import os
 import psycopg2
+import psycopg2.extras
 from psycopg2.extras import RealDictCursor
 import json
 from typing import List, Dict, Optional
@@ -94,21 +95,42 @@ def create_field_config(field_name: str, field_label: str, field_type: str, ques
     try:
         with conn.cursor() as cur:
             # Get next sort order
-            cur.execute("SELECT COALESCE(MAX(sort_order), 0) + 1 FROM admin_field_configs")
-            next_order = cur.fetchone()[0]
+            cur.execute("SELECT COALESCE(MAX(sort_order), 0) + 1 as next_order FROM admin_field_configs")
+            order_result = cur.fetchone()
+            next_order = order_result['next_order'] if order_result else 1
             
-            cur.execute("""
-                INSERT INTO admin_field_configs (field_name, field_label, field_type, question_text, is_required, sort_order)
-                VALUES (%s, %s, %s, %s, %s, %s)
+            # Check if field_name already exists
+            cur.execute("SELECT COUNT(*) as field_count FROM admin_field_configs WHERE field_name = %s", (field_name,))
+            count_result = cur.fetchone()
+            count = count_result['field_count'] if count_result else 0
+                
+            if count > 0:
+                raise ValueError(f"Field name '{field_name}' already exists. Please use a different name.")
+            
+            # Insert new field configuration  
+            insert_query = """
+                INSERT INTO admin_field_configs (field_name, field_label, field_type, question_text, is_required, is_active, sort_order)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
                 RETURNING *;
-            """, (field_name, field_label, field_type, question_text, is_required, next_order))
+            """
+            insert_params = (field_name, field_label, field_type, question_text, is_required, True, next_order)
             
-            result = dict(cur.fetchone())
+            cur.execute(insert_query, insert_params)
+            row = cur.fetchone()
+            
+            if row is None:
+                raise ValueError("Failed to create field configuration - no row returned")
+            
             conn.commit()
-            return result
+            return dict(row)
+    except psycopg2.Error as e:
+        conn.rollback()
+        print(f"PostgreSQL error in create_field_config: {e}")
+        raise ValueError(f"Database error: {e}")
     except Exception as e:
         conn.rollback()
-        raise e
+        print(f"General error in create_field_config: {e}")
+        raise ValueError(f"Error creating field: {e}")
     finally:
         conn.close()
 

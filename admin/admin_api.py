@@ -55,6 +55,11 @@ async def get_active_fields():
 async def create_field(field_config: FieldConfigCreate):
     """API endpoint to create a new field configuration."""
     try:
+        # Validate field_name (alphanumeric and underscore only)
+        import re
+        if not re.match(r'^[a-zA-Z][a-zA-Z0-9_]*$', field_config.field_name):
+            raise ValueError("Field name must start with a letter and contain only letters, numbers, and underscores")
+        
         result = create_field_config(
             field_config.field_name,
             field_config.field_label,
@@ -64,6 +69,7 @@ async def create_field(field_config: FieldConfigCreate):
         )
         return {"success": True, "field_config": result}
     except Exception as e:
+        print(f"API error in create_field: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
 @router.put("/admin/api/fields/{field_id}")
