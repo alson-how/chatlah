@@ -467,7 +467,16 @@ def get_missing_info(session):
 def is_conversation_complete(session):
     """Check if we have all required information to complete the conversation."""
     required = ["name", "phone", "location", "style_preference"]
-    return all(session.get(field) for field in required)
+    result = all(session.get(field) for field in required)
+    
+    # Debug: Print what we have and what's missing (only when conversation should complete)
+    if result:
+        print(f"DEBUG: Conversation completed with all required fields:")
+        for field in required:
+            value = session.get(field)
+            print(f"  {field}: {value}")
+    
+    return result
 
 
 @app.post("/ask", response_model=AskResponse)
@@ -536,7 +545,15 @@ def chat_endpoint(req: ChatRequest):
     
     if not st.get("style_preference"):
         style_result = extract_style(user_text)
-        if style_result and style_result.get("theme") != "generic":
+        # Validate that this is actually a style-related message
+        style_keywords = ['style', 'design', 'modern', 'minimalist', 'contemporary', 'traditional', 
+                         'scandinavian', 'industrial', 'rustic', 'elegant', 'cozy', 'luxury', 
+                         'vintage', 'classic', 'aesthetic', 'theme', 'vibe', 'feel', 'look']
+        
+        has_style_context = any(keyword in user_text.lower() for keyword in style_keywords)
+        
+        if (style_result and style_result.get("theme") and style_result.get("theme") != "generic" 
+            and has_style_context and len(user_text.strip()) > 3):
             st["style_preference"] = user_text
             # Store theme and portfolio link for later use
             st["style_theme"] = style_result.get("theme")
@@ -595,7 +612,7 @@ def chat_endpoint(req: ChatRequest):
     # Dynamic conversation flow - only end when we have ALL required info
     if is_conversation_complete(st):
         final_name = st.get("name", "there")
-        reply = f"Perfect! Thank you {final_name}. I have all the details I need - your contact info, location ({st.get('location')}), and style preference. I'll prepare a proposal and contact you soon at {st.get('phone')}."
+        reply = f"Perfect! Thank you {final_name}. I have all the details I need - your contact info, location ({st.get('location')}), and style preference ({st.get('style_preference')}). I'll prepare a proposal and contact you soon at {st.get('phone')}."
         st["conversation_complete"] = True
         st["turns"].append(("user", req.user_message))
         st["turns"].append(("assistant", reply))
